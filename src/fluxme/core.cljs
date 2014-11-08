@@ -8,13 +8,13 @@
 ;; Initialize
 
 (declare conn)
-(declare subscribers)
+(declare subscribers-map)
 (declare publisher)
 (declare publication)
 
 (defn init-fluxme! [new-conn new-publisher]
   (defonce conn new-conn)
-  (defonce subscribers (atom {}))
+  (defonce subscribers-map (atom {}))
   (defonce publisher new-publisher)
   (defonce publication (a/pub publisher :type)))
 
@@ -30,15 +30,15 @@
     subjects))
 
 (defn unsubscribe! [chan-key]
-  (when-let [{:keys [chan topics]} (get @subscribers chan-key)]
+  (when-let [{:keys [chan topics]} (get @subscribers-map chan-key)]
     (doseq [topic topics]
       (a/unsub publication topic chan))
-    (swap! subscribers dissoc chan-key)))
+    (swap! subscribers-map dissoc chan-key)))
 
 (defn subscribe! [event-types chan-key ch]
   (doseq [event-type event-types]
     (a/sub publication event-type ch true))
-  (swap! subscribers assoc chan-key {:chan ch, :topics event-types}))
+  (swap! subscribers-map assoc chan-key {:chan ch, :topics event-types}))
 
 (defn publish! [^Event e]
   {:pre [(instance? Event e)]}
