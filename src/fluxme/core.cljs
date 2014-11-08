@@ -8,15 +8,13 @@
 ;; Initialize
 
 (declare conn)
-(declare subscribers-map)
-(declare publisher)
-(declare publication)
 
-(defn init-fluxme! [new-conn new-publisher]
-  (defonce conn new-conn)
-  (defonce subscribers-map (atom {}))
-  (defonce publisher new-publisher)
-  (defonce publication (a/pub publisher :type)))
+(defonce subscribers-map (atom {}))
+(defonce publisher (chan 2048))
+(defonce publication (a/pub publisher :type))
+
+(defn init-conn! [new-conn]
+  (defonce conn new-conn))
 
 ;; Events
 
@@ -74,8 +72,24 @@
 (defprotocol ISubscribe
   (subscribers [this]))
 
-(defn dispatcher [react-component]
+(defn get-dispatcher [react-component]
   (aget react-component "__fluxme_dispatcher"))
+
+(defn get-subscriber-keys [react-component]
+  (aget react-component "__fluxme_subscriber_keys"))
+
+(defn set-subscriber-keys [react-component v]
+  (aset react-component "__fluxme_subscriber_keys" v))
+
+(defn get-fluxme-state-atom [react-component]
+  (aget react-component "__fluxme_state"))
+
+(defn update! [react-component dispatcher]
+  (let [current-state-atom (get-fluxme-state-atom react-component)
+        new-state (query dispatcher @conn)]
+    (when (not= @current-state-atom new-state)
+      (reset! current-state-atom new-state)
+      (.forceUpdate react-component))))
 
 ;; Trying out pure-methods from OM as well
 
@@ -84,7 +98,7 @@
    (fn []
      (this-as
        this
-       (let [d (dispatcher this)]
+       (let [d (get-dispatcher this)]
          (when (satisfies? IDisplayName d)
            (display-name d this)))))
    :shouldComponentUpdate
@@ -93,14 +107,14 @@
    (fn []
      (this-as
        this
-       (let [d (dispatcher this)]
+       (let [d (get-dispatcher this)]
          (when (satisfies? IWillMount d)
            (will-mount d this)))))
    :componentDidMount
    (fn []
      (this-as
        this
-       (let [d (dispatcher this)]
+       (let [d (get-dispatcher this)]
          (d/listen!
            conn
            ;; idea from https://gist.github.com/allgress/11348685
@@ -109,21 +123,21 @@
                (when-not (nil? novelty)
                  (if (coll? novelty)
                    (when (not-empty novelty)
-                     (.forceUpdate this))
-                   (.forceUpdate this))))))
+                     (update! this d))
+                   (update! this d))))))
          (when (satisfies? ISubscribe d)
-           (aset this "__fluxme_subscriber_keys" (subscribers d)))
+           (set-subscriber-keys this (subscribers d)))
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
    :componentWillUnmount
    (fn []
      (this-as
        this
-       (let [d (dispatcher this)]
+       (let [d (get-dispatcher this)]
          (when (satisfies? ISubscribe d)
-           (doseq [subscriber-key (aget this "__fluxme_subscriber_keys")]
+           (doseq [subscriber-key (get-subscriber-keys this)]
              (unsubscribe! subscriber-key))
-           (aset this "__fluxme_subscriber_keys" nil))
+           (set-subscriber-keys this nil))
          (when (satisfies? IWillUnmount d)
            (will-unmount d this)))))
    ;; TODO: Make these really get the state
@@ -143,15 +157,17 @@
               (did-update d prev-props prev-state)))))})
 
 (defn component [d]
-  (let [c (js/React.createClass
+  (let [state (atom (query d @conn))
+        c (js/React.createClass
             (clj->js
               (merge
                 pure-methods
                 {:render
-                 (fn []
-                   (html (render d (query d @conn))))
+                 (fn [] (html (render d @state)))
                  :__fluxme_dispatcher
-                 d})))]
+                 d
+                 :__fluxme_state
+                 state})))]
     c))
 
 (defn mount-app [app mount-point]
