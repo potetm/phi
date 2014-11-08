@@ -9,11 +9,13 @@
                  [datascript "0.5.1"]
                  [org.clojure/clojure "1.6.0"]
                  [org.clojure/clojurescript "0.0-2371"]
-                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
+                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [sablono "0.2.22"]]
   :plugins [[lein-cljsbuild "1.0.3"]]
   :cljsbuild {:builds
-              [{:id "dev"
+              [{:id           "dev"
                 :source-paths ["src"]
-                :compiler {:optimizations :whitespace
-                           :pretty-print true
-                           :output-to "target/fluxme.js"}}]})
+                :compiler     {:optimizations :whitespace
+                               :pretty-print  true
+                               :preamble      ["react/react.js"]
+                               :output-to     "target/fluxme.js"}}]})
