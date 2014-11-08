@@ -48,16 +48,16 @@
 ;; React Lifecycle protocols from OM
 
 (defprotocol IDisplayName
-  (display-name [this]))
+  (display-name [this component]))
 
 (defprotocol IWillMount
-  (will-mount [this]))
+  (will-mount [this component]))
 
 (defprotocol IDidMount
-  (did-mount [this]))
+  (did-mount [this component]))
 
 (defprotocol IWillUnmount
-  (will-unmount [this]))
+  (will-unmount [this component]))
 
 #_(defprotocol IWillUpdate
   (will-update [this next-props next-state]))
@@ -86,7 +86,7 @@
        this
        (let [d (dispatcher this)]
          (when (satisfies? IDisplayName d)
-           (display-name d)))))
+           (display-name d this)))))
    :shouldComponentUpdate
    (constantly false)
    :componentWillMount
@@ -95,7 +95,7 @@
        this
        (let [d (dispatcher this)]
          (when (satisfies? IWillMount d)
-           (will-mount d)))))
+           (will-mount d this)))))
    :componentDidMount
    (fn []
      (this-as
@@ -114,7 +114,7 @@
          (when (satisfies? ISubscribe d)
            (aset this "__fluxme_subscriber_keys" (subscribers d)))
          (when (satisfies? IDidMount d)
-           (did-mount d)))))
+           (did-mount d this)))))
    :componentWillUnmount
    (fn []
      (this-as
@@ -122,9 +122,10 @@
        (let [d (dispatcher this)]
          (when (satisfies? ISubscribe d)
            (doseq [subscriber-key (aget this "__fluxme_subscriber_keys")]
-             (unsubscribe! subscriber-key)))
+             (unsubscribe! subscriber-key))
+           (aset this "__fluxme_subscriber_keys" nil))
          (when (satisfies? IWillUnmount d)
-           (will-unmount d)))))
+           (will-unmount d this)))))
    ;; TODO: Make these really get the state
    #_   :componentWillUpdate
    #_   (fn [next-props next-state]
