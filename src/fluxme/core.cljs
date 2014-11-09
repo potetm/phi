@@ -75,24 +75,21 @@
 (defn get-dispatcher [react-component]
   (aget react-component "__fluxme_dispatcher"))
 
-(defn get-subscriber-keys [react-component]
-  (aget react-component "__fluxme_subscriber_keys"))
+(defn get-instance-atom [react-component]
+  (aget react-component "__fluxme_instance_atom"))
 
-(defn set-subscriber-keys [react-component v]
-  (aset react-component "__fluxme_subscriber_keys" v))
-
-(defn get-fluxme-state-atom [react-component]
-  (aget react-component "__fluxme_state"))
+(defn init-instance-atom [react-component]
+  (aset react-component "__fluxme_instance_atom" (atom {})))
 
 (defn update! [react-component dispatcher]
-  (let [state-atom (get-fluxme-state-atom react-component)
-        old-state @state-atom
+  (let [instance-atom (get-instance-atom react-component)
+        old-state (:state @instance-atom)
         new-state (query dispatcher @conn)]
     (when (not= old-state new-state)
       (when (satisfies? IWillUpdate dispatcher)
         (will-update dispatcher react-component new-state))
 
-      (reset! state-atom new-state)
+      (swap! instance-atom assoc :state (query dispatcher @conn))
       (.forceUpdate react-component)
 
       (when (satisfies? IDidUpdate dispatcher)
@@ -115,15 +112,20 @@
      (this-as
        this
        (let [d (get-dispatcher this)]
+         (init-instance-atom this)
+         (swap! (get-instance-atom this) assoc :state (query d @conn))
          (when (satisfies? IWillMount d)
            (will-mount d this)))))
    :componentDidMount
    (fn []
      (this-as
        this
-       (let [d (get-dispatcher this)]
+       (let [d (get-dispatcher this)
+             instance-atom (get-instance-atom this)
+             k (str (uuid/make-random))]
          (d/listen!
            conn
+           k
            ;; idea from https://gist.github.com/allgress/11348685
            (fn [tx-data]
              (let [novelty (query d (:tx-data tx-data))]
@@ -132,35 +134,38 @@
                    (when (not-empty novelty)
                      (update! this d))
                    (update! this d))))))
+         (swap! instance-atom assoc :tx-listen-key k)
          (when (satisfies? ISubscribe d)
-           (set-subscriber-keys this (subscribers d)))
+           (swap! instance-atom assoc :subscriber-keys (subscribers d)))
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
    :componentWillUnmount
    (fn []
      (this-as
        this
-       (let [d (get-dispatcher this)]
+       (let [d (get-dispatcher this)
+             instance-atom (get-instance-atom this)
+             instance-vars @instance-atom]
+         (d/unlisten! conn (:tx-listen-key instance-vars))
+         (swap! instance-atom dissoc :tx-listen-key)
          (when (satisfies? ISubscribe d)
-           (doseq [subscriber-key (get-subscriber-keys this)]
+           (doseq [subscriber-key (:subscriber-keys instance-vars)]
              (unsubscribe! subscriber-key))
-           (set-subscriber-keys this nil))
+           (swap! instance-atom dissoc :subscriber-keys))
          (when (satisfies? IWillUnmount d)
            (will-unmount d this)))))})
 
 (defn component [d]
-  (let [state (atom (query d @conn))
-        c (js/React.createClass
-            (clj->js
-              (merge
-                pure-methods
-                {:render
-                 (fn [] (html (render d @state)))
-                 :__fluxme_dispatcher
-                 d
-                 :__fluxme_state
-                 state})))]
-    c))
+  (js/React.createClass
+    (clj->js
+      (merge
+        pure-methods
+        {:render
+         (fn []
+           (this-as this
+                    (html (render d (:state @(get-instance-atom this))))))
+         :__fluxme_dispatcher
+         d}))))
 
 (defn mount-app [app mount-point]
   (js/React.renderComponent app mount-point))
