@@ -57,11 +57,11 @@
 (defprotocol IWillUnmount
   (will-unmount [this component]))
 
-#_(defprotocol IWillUpdate
-  (will-update [this next-props next-state]))
+(defprotocol IWillUpdate
+  (will-update [this component next-state]))
 
-#_(defprotocol IDidUpdate
-  (did-update [this prev-props prev-state]))
+(defprotocol IDidUpdate
+  (did-update [this component prev-state]))
 
 ;; My additions
 
@@ -85,11 +85,18 @@
   (aget react-component "__fluxme_state"))
 
 (defn update! [react-component dispatcher]
-  (let [current-state-atom (get-fluxme-state-atom react-component)
+  (let [state-atom (get-fluxme-state-atom react-component)
+        old-state @state-atom
         new-state (query dispatcher @conn)]
-    (when (not= @current-state-atom new-state)
-      (reset! current-state-atom new-state)
-      (.forceUpdate react-component))))
+    (when (not= old-state new-state)
+      (when (satisfies? IWillUpdate dispatcher)
+        (will-update dispatcher react-component new-state))
+
+      (reset! state-atom new-state)
+      (.forceUpdate react-component)
+
+      (when (satisfies? IDidUpdate dispatcher)
+        (did-update dispatcher react-component old-state)))))
 
 ;; Trying out pure-methods from OM as well
 
@@ -139,22 +146,7 @@
              (unsubscribe! subscriber-key))
            (set-subscriber-keys this nil))
          (when (satisfies? IWillUnmount d)
-           (will-unmount d this)))))
-   ;; TODO: Make these really get the state
-   #_   :componentWillUpdate
-   #_   (fn [next-props next-state]
-        (this-as
-          this
-          (let [d (dispatcher this)]
-            (when (satisfies? IWillUpdate d)
-              (will-update d next-props next-state)))))
-   #_   :componentDidUpdate
-   #_   (fn [prev-props prev-state]
-        (this-as
-          this
-          (let [d (dispatcher this)]
-            (when (satisfies? IDidUpdate d)
-              (did-update d prev-props prev-state)))))})
+           (will-unmount d this)))))})
 
 (defn component [d]
   (let [state (atom (query d @conn))
