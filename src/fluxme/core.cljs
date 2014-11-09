@@ -67,7 +67,8 @@
 
 (defprotocol IFlux
   (query [this db])
-  (render [this v]))
+  (render [this v]
+          [this props v]))
 
 (defprotocol ISubscribe
   (subscribers [this]))
@@ -156,16 +157,23 @@
            (will-unmount d this)))))})
 
 (defn component [d]
-  (js/React.createClass
-    (clj->js
-      (merge
-        pure-methods
-        {:render
-         (fn []
-           (this-as this
-                    (html (render d (:state @(get-instance-atom this))))))
-         :__fluxme_dispatcher
-         d}))))
+  (let [c (js/React.createClass
+            (clj->js
+              (merge
+                pure-methods
+                {:render
+                 (fn []
+                   (this-as
+                     this
+                     (let [instance-state @(get-instance-atom this)
+                           constants (.-constants (.-props this))]
+                       (html (if constants
+                               (render d constants (:state instance-state))
+                               (render d (:state instance-state)))))))
+                 :__fluxme_dispatcher
+                 d})))]
+    (fn [& [props]]
+      (js/React.createElement c (if props #js {:constants props} #js {})))))
 
 (defn mount-app [app mount-point]
   (js/React.renderComponent app mount-point))
