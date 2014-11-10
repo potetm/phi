@@ -1,4 +1,5 @@
 (ns fluxme.core
+  (:refer-clojure :exclude [js->clj])
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs.core.async :refer [chan] :as a]
             [cljs-uuid.core :as uuid]
@@ -58,20 +59,33 @@
   (will-unmount [this component]))
 
 (defprotocol IWillUpdate
-  (will-update [this component next-state]))
+  (will-update [this component next-props next-state]))
 
 (defprotocol IDidUpdate
-  (did-update [this component prev-state]))
+  (did-update [this component prev-props prev-state]))
 
 ;; My additions
 
 (defprotocol IFlux
-  (query [this db])
+  (query [this db]
+         [this props db])
   (render [this v]
           [this props v]))
 
 (defprotocol ISubscribe
   (subscribers [this]))
+
+(defn js->clj [form]
+  (cljs.core/js->clj form :keywordize-keys true))
+
+(defn get-ref [component ref]
+  (aget (.-refs component) ref))
+
+(defn get-dom-node [component]
+  (.getDOMNode component))
+
+(defn mounted? [component]
+  (.isMounted component))
 
 (defn get-dispatcher [react-component]
   (aget react-component "__fluxme_dispatcher"))
@@ -82,19 +96,20 @@
 (defn init-instance-atom [react-component]
   (aset react-component "__fluxme_instance_atom" (atom {})))
 
-(defn update! [react-component dispatcher]
-  (let [instance-atom (get-instance-atom react-component)
-        old-state (:state @instance-atom)
-        new-state (query dispatcher @conn)]
-    (when (not= old-state new-state)
-      (when (satisfies? IWillUpdate dispatcher)
-        (will-update dispatcher react-component new-state))
+(defn query* [react-component dispatcher db]
+  (let [props (js->clj (.-props react-component))]
+    (if (empty? props)
+      (query dispatcher db)
+      (query dispatcher props db))))
 
-      (swap! instance-atom assoc :state (query dispatcher @conn))
-      (.forceUpdate react-component)
-
-      (when (satisfies? IDidUpdate dispatcher)
-        (did-update dispatcher react-component old-state)))))
+(defn update! [react-component dispatcher db]
+  (when (mounted? react-component)
+    (let [instance-atom (get-instance-atom react-component)
+          old-state (:state @instance-atom)
+          new-state (query* react-component dispatcher db)]
+      (when (not= old-state new-state)
+        (swap! instance-atom assoc :state new-state)
+        (.forceUpdate react-component)))))
 
 ;; Trying out pure-methods from OM as well
 
@@ -114,7 +129,7 @@
        this
        (let [d (get-dispatcher this)]
          (init-instance-atom this)
-         (swap! (get-instance-atom this) assoc :state (query d @conn))
+         (swap! (get-instance-atom this) assoc :state (query* this d @conn))
          (when (satisfies? IWillMount d)
            (will-mount d this)))))
    :componentDidMount
@@ -124,17 +139,7 @@
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
              k (str (uuid/make-random))]
-         (d/listen!
-           conn
-           k
-           ;; idea from https://gist.github.com/allgress/11348685
-           (fn [tx-data]
-             (let [novelty (query d (:tx-data tx-data))]
-               (when-not (nil? novelty)
-                 (if (coll? novelty)
-                   (when (not-empty novelty)
-                     (update! this d))
-                   (update! this d))))))
+         (d/listen! conn k #(update! this d (:db-after %)))
          (swap! instance-atom assoc :tx-listen-key k)
          (when (satisfies? ISubscribe d)
            (swap! instance-atom assoc :subscriber-keys (subscribers d)))
@@ -154,7 +159,21 @@
              (unsubscribe! subscriber-key))
            (swap! instance-atom dissoc :subscriber-keys))
          (when (satisfies? IWillUnmount d)
-           (will-unmount d this)))))})
+           (will-unmount d this)))))
+   :componentWillUpdate
+   (fn [next-props _next-state]
+     (this-as
+       this
+       (let [d (get-dispatcher this)]
+         (when (satisfies? IWillUpdate d)
+           (will-update d this (js->clj next-props) (:state @(get-instance-atom this)))))))
+   :componentDidUpdate
+   (fn [prev-props _prev-state]
+     (this-as
+       this
+       (let [d (get-dispatcher this)]
+         (when (satisfies? IDidUpdate d)
+           (did-update d this (js->clj prev-props) (:state @(get-instance-atom this)))))))})
 
 (defn component [d]
   (let [c (js/React.createClass
@@ -166,14 +185,14 @@
                    (this-as
                      this
                      (let [instance-state @(get-instance-atom this)
-                           constants (.-constants (.-props this))]
-                       (html (if constants
-                               (render d constants (:state instance-state))
-                               (render d (:state instance-state)))))))
+                           props (js->clj (.-props this))]
+                       (html (if (empty? props)
+                               (render d (:state instance-state))
+                               (render d props (:state instance-state)))))))
                  :__fluxme_dispatcher
                  d})))]
     (fn [& [props]]
-      (js/React.createElement c (if props #js {:constants props} #js {})))))
+      (js/React.createElement c (clj->js props)))))
 
 (defn mount-app [app mount-point]
   (js/React.renderComponent app mount-point))
