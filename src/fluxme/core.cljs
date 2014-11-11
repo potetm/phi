@@ -14,8 +14,16 @@
 (defonce publisher (chan 2048))
 (defonce publication (a/pub publisher :type))
 
+(defonce ^:private component-render-fns (atom #{}))
+
 (defn init-conn! [new-conn]
-  (defonce conn new-conn))
+  (defonce conn new-conn)
+  (d/listen!
+    conn
+    (fn [tx-report]
+      (let [db (:db-after tx-report)]
+        (doseq [render @component-render-fns]
+          (render db))))))
 
 ;; Events
 
@@ -138,9 +146,9 @@
        this
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
-             k (str (uuid/make-random))]
-         (d/listen! conn k #(update! this d (:db-after %)))
-         (swap! instance-atom assoc :tx-listen-key k)
+             render (partial update! this d)]
+         (swap! component-render-fns conj render)
+         (swap! instance-atom assoc :render-fn render)
          (when (satisfies? ISubscribe d)
            (swap! instance-atom assoc :subscriber-keys (subscribers d)))
          (when (satisfies? IDidMount d)
@@ -152,8 +160,8 @@
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
              instance-vars @instance-atom]
-         (d/unlisten! conn (:tx-listen-key instance-vars))
-         (swap! instance-atom dissoc :tx-listen-key)
+         (swap! component-render-fns disj (:render-fn instance-vars))
+         (swap! instance-atom dissoc :render-fn)
          (when (satisfies? ISubscribe d)
            (doseq [subscriber-key (:subscriber-keys instance-vars)]
              (unsubscribe! subscriber-key))
