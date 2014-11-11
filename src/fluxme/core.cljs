@@ -86,6 +86,8 @@
   (fact-parts [this]
               [this props]))
 
+(defprotocol IUpdateInAnimationFrame)
+
 (defn js->clj [form]
   (cljs.core/js->clj form :keywordize-keys true))
 
@@ -113,13 +115,21 @@
       (query dispatcher db)
       (query dispatcher props db))))
 
-(defn run-full-query-and-update [react-component dispatcher db]
+(defn run-full-query-and-update* [react-component dispatcher db]
   (let [instance-atom (get-instance-atom react-component)
         old-state (:state @instance-atom)
         new-state (query* react-component dispatcher db)]
     (when (not= old-state new-state)
       (swap! instance-atom assoc :state new-state)
       (.forceUpdate react-component))))
+
+(defn run-full-query-and-update [react-component dispatcher db]
+  (let [update #(run-full-query-and-update* react-component dispatcher db)]
+    (if (satisfies? IUpdateInAnimationFrame dispatcher)
+      (if (exists? js/requestAnimationFrame)
+        (js/requestAnimationFrame update)
+        (js/setTimeout update 16))
+      (update))))
 
 (defn fact-parts-match? [react-component dispatcher tx-data]
   (let [props (js->clj (.-props react-component))
@@ -143,6 +153,7 @@
       (when (fact-parts-match? react-component dispatcher tx-data)
         (run-full-query-and-update react-component dispatcher db-after))
       (run-full-query-and-update react-component dispatcher db-after))))
+
 ;; Trying out pure-methods from OM as well
 
 (def pure-methods
