@@ -122,26 +122,20 @@
       (.forceUpdate react-component))))
 
 (defn fact-parts-match? [react-component dispatcher tx-data]
-  (let [props (js->clj (.-props react-component))]
-    (loop [parts (if (empty? props) (fact-parts dispatcher)
-                                    (fact-parts dispatcher props))]
-      (let [[e a v] (first parts)
-            r (rest parts)]
-        (if (loop [tx-data tx-data]
-              (let [datom (first tx-data)
-                    r (rest tx-data)]
-                (if (and datom
-                         (or (nil? e) (= e (.-e datom)))
-                         (or (nil? a) (= a (.-a datom)))
-                         (or (nil? v) (= v (.-v datom))))
-                  true
-                  (if (seq r)
-                    (recur r)
-                    false))))
-          true
-          (if (seq r)
-            (recur r)
-            false))))))
+  (let [props (js->clj (.-props react-component))
+        parts (if (empty? props) (fact-parts dispatcher)
+                                 (fact-parts dispatcher props))]
+    (boolean
+      (some
+        (fn [[e a v]]
+          (some
+            (fn [datom]
+              (and datom
+                   (or (nil? e) (= e (.-e datom)))
+                   (or (nil? a) (= a (.-a datom)))
+                   (or (nil? v) (= v (.-v datom)))))
+            tx-data))
+        parts))))
 
 (defn update! [react-component dispatcher {:keys [tx-data db-after]}]
   (when (mounted? react-component)
