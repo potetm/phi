@@ -21,9 +21,8 @@
   (d/listen!
     conn
     (fn [tx-report]
-      (let [db (:db-after tx-report)]
-        (doseq [render @component-render-fns]
-          (render db))))))
+      (doseq [render @component-render-fns]
+        (render tx-report)))))
 
 ;; Events
 
@@ -83,6 +82,10 @@
 (defprotocol ISubscribe
   (subscribers [this]))
 
+(defprotocol IUpdateForFactParts
+  (fact-parts [this]
+              [this props]))
+
 (defn js->clj [form]
   (cljs.core/js->clj form :keywordize-keys true))
 
@@ -110,15 +113,42 @@
       (query dispatcher db)
       (query dispatcher props db))))
 
-(defn update! [react-component dispatcher db]
-  (when (mounted? react-component)
-    (let [instance-atom (get-instance-atom react-component)
-          old-state (:state @instance-atom)
-          new-state (query* react-component dispatcher db)]
-      (when (not= old-state new-state)
-        (swap! instance-atom assoc :state new-state)
-        (.forceUpdate react-component)))))
+(defn run-full-query-and-update [react-component dispatcher db]
+  (let [instance-atom (get-instance-atom react-component)
+        old-state (:state @instance-atom)
+        new-state (query* react-component dispatcher db)]
+    (when (not= old-state new-state)
+      (swap! instance-atom assoc :state new-state)
+      (.forceUpdate react-component))))
 
+(defn fact-parts-match? [react-component dispatcher tx-data]
+  (let [props (js->clj (.-props react-component))]
+    (loop [parts (if (empty? props) (fact-parts dispatcher)
+                                    (fact-parts dispatcher props))]
+      (let [[e a v] (first parts)
+            r (rest parts)]
+        (if (loop [tx-data tx-data]
+              (let [datom (first tx-data)
+                    r (rest tx-data)]
+                (if (and datom
+                         (or (nil? e) (= e (.-e datom)))
+                         (or (nil? a) (= a (.-a datom)))
+                         (or (nil? v) (= v (.-v datom))))
+                  true
+                  (if (seq r)
+                    (recur r)
+                    false))))
+          true
+          (if (seq r)
+            (recur r)
+            false))))))
+
+(defn update! [react-component dispatcher {:keys [tx-data db-after]}]
+  (when (mounted? react-component)
+    (if (satisfies? IUpdateForFactParts dispatcher)
+      (when (fact-parts-match? react-component dispatcher tx-data)
+        (run-full-query-and-update react-component dispatcher db-after))
+      (run-full-query-and-update react-component dispatcher db-after))))
 ;; Trying out pure-methods from OM as well
 
 (def pure-methods
@@ -182,6 +212,15 @@
        (let [d (get-dispatcher this)]
          (when (satisfies? IDidUpdate d)
            (did-update d this (js->clj prev-props) (:state @(get-instance-atom this)))))))})
+
+;; Idea: Add optional IUpdateForAttrs protocol and we can do a check like this on tx-data:
+;; https://github.com/someteam/acha/blob/master/src-cljs/acha.cljs#L430
+
+;; Also add optional IUpdateInAnimationFrame marker interface and we can
+;; queue updates to that component to run in js/requestAnimationFrame.
+;;
+;; Ideally the queue will be smart enough to overwrite duplicate updates to a component
+
 
 (defn component [d]
   (let [c (js/React.createClass
