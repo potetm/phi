@@ -11,6 +11,7 @@
 ;; Initialize
 
 (declare conn)
+(declare optimization-strategy)
 
 (defonce subscribers-map (atom {}))
 (defonce publisher (chan 2048))
@@ -107,7 +108,6 @@
 (defonce ^:private component-map (atom {}))
 (defonce ^:private render-queue (atom #{}))
 (def ^:private render-requested false)
-(defonce ^:private fact-part-map (atom {}))
 
 (defn query* [c db]
   (let [d (get-dispatcher c)
@@ -136,6 +136,11 @@
       (when-let [c (get cmap id)]
         (run-query-and-render c)))))
 
+(defprotocol IOptimizeUpdates
+  (-init-component [this id component])
+  (-cleanup-component [this id component])
+  (-get-component-ids-for-operation [this op-data]))
+
 (defn datom->fact-parts [d]
   [[(.-e d)]
    [(.-e d) (.-a d)]
@@ -144,25 +149,45 @@
    [nil (.-a d) (.-v d)]
    [nil nil (.-v d)]])
 
-(defn get-component-ids-for-tx-data [tx-data]
-  (let [fpm @fact-part-map]
-    (distinct
-      (concat
-        (mapcat
-          (fn [datom]
-            (mapcat
-              (partial get fpm)
-              (datom->fact-parts datom)))
-          tx-data)
-        (::no-parts fpm)))))
+(defrecord Datascript [conn fact-part-map-atom]
+  IOptimizeUpdates
+  (-init-component [_ id c]
+    (let [d (get-dispatcher c)
+          props (js->clj (.-props c))]
+      (if (satisfies? IUpdateForFactParts d)
+        (doseq [fp (if (empty? props)
+                     (fact-parts d)
+                     (fact-parts d props))]
+          (swap! fact-part-map-atom update-in [fp] conj id))
+        (swap! fact-part-map-atom update-in [::no-parts] conj id))))
+  (-cleanup-component [_ id c]
+    (let [d (get-dispatcher c)
+          props (js->clj (.-props c))]
+      (if (satisfies? IUpdateForFactParts d)
+        (doseq [fp (if (empty? props) (fact-parts d)
+                                      (fact-parts d props))]
+          (swap! fact-part-map-atom update-in [fp] #(remove #{id} %)))
+        (swap! fact-part-map-atom update-in [::no-parts] #(remove #{id} %)))))
+  (-get-component-ids-for-operation [_ tx-data]
+    (let [fpm @fact-part-map-atom]
+      (distinct
+        (concat
+          (mapcat
+            (fn [datom]
+              (mapcat
+                (partial get fpm)
+                (datom->fact-parts datom)))
+            tx-data)
+          (::no-parts fpm))))))
 
 (defn init-conn! [new-conn]
   (defonce conn new-conn)
+  (defonce optimization-strategy (->Datascript conn (atom {})))
   (d/listen!
     conn
     (fn [{:keys [tx-data]}]
       (let [cm @component-map
-            ids (get-component-ids-for-tx-data tx-data)]
+            ids (-get-component-ids-for-operation optimization-strategy tx-data)]
         (doseq [id ids
                 :let [c (get cm id)
                       d (and c (get-dispatcher c))]]
@@ -204,15 +229,10 @@
        this
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
-             id (gen-id)
-             props (js->clj (.-props this))]
+             id (gen-id)]
          (swap! component-map assoc id this)
          (swap! instance-atom assoc :id id)
-         (if (satisfies? IUpdateForFactParts d)
-           (doseq [fp (if (empty? props) (fact-parts d)
-                                         (fact-parts d props))]
-             (swap! fact-part-map update-in [fp] conj id))
-           (swap! fact-part-map update-in [::no-parts] conj id))
+         (-init-component optimization-strategy id this)
          (when (satisfies? ISubscribe d)
            (swap! instance-atom assoc :subscriber-keys (subscribers d)))
          (when (satisfies? IDidMount d)
@@ -224,15 +244,10 @@
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
              instance-vars @instance-atom
-             props (js->clj (.-props this))
              id (:id instance-vars)]
-         (if (satisfies? IUpdateForFactParts d)
-           (doseq [fp (if (empty? props) (fact-parts d)
-                                         (fact-parts d props))]
-             (swap! fact-part-map update-in [fp] #(remove #{id} %)))
-           (swap! fact-part-map update-in [::no-parts] #(remove #{id} %)))
          (swap! component-map dissoc id)
          (swap! instance-atom dissoc :id)
+         (-cleanup-component optimization-strategy id this)
          (when (satisfies? ISubscribe d)
            (doseq [subscriber-key (:subscriber-keys instance-vars)]
              (unsubscribe! subscriber-key))
