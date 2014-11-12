@@ -104,23 +104,6 @@
 (defn init-instance-atom [react-component]
   (aset react-component "__fluxme_instance_atom" (atom {})))
 
-(defn fact-parts-match? [component tx-data]
-  (let [props (js->clj (.-props component))
-        d (get-dispatcher component)
-        parts (if (empty? props) (fact-parts d)
-                                 (fact-parts d props))]
-    (boolean
-      (some
-        (fn [[e a v]]
-          (some
-            (fn [datom]
-              (and datom
-                   (or (nil? e) (= e (.-e datom)))
-                   (or (nil? a) (= a (.-a datom)))
-                   (or (nil? v) (= v (.-v datom)))))
-            tx-data))
-        parts))))
-
 (defonce ^:private component-map (atom {}))
 (defonce ^:private render-queue (atom #{}))
 (def ^:private render-requested false)
@@ -133,7 +116,7 @@
       (query d db)
       (query d props db))))
 
-(defn run-query-and-render* [c]
+(defn run-query-and-render [c]
   (let [instance-atom (get-instance-atom c)
         old-state (:state @instance-atom)
         new-state (query* c @conn)]
@@ -151,20 +134,7 @@
                   (recur @render-queue)))]
     (doseq [id queue]
       (when-let [c (get cmap id)]
-        (run-query-and-render* c)))))
-
-(defn run-query-and-render [id c]
-  (let [d (get-dispatcher c)
-        update #(run-query-and-render* c)]
-    (if-not (satisfies? IUpdateInAnimationFrame d)
-      (update)
-      (do
-        (swap! render-queue conj id)
-        (when-not render-requested
-          (set! render-requested true)
-          (if (exists? js/requestAnimationFrame)
-            (js/requestAnimationFrame render-all-queued)
-            (js/setTimeout render-all-queued 16)))))))
+        (run-query-and-render c)))))
 
 (defn datom->fact-parts [d]
   [[(.-e d)]
@@ -191,15 +161,21 @@
   (d/listen!
     conn
     (fn [{:keys [tx-data]}]
-      (let [cm @component-map]
-        (doseq [id (get-component-ids-for-tx-data tx-data)
+      (let [cm @component-map
+            ids (get-component-ids-for-tx-data tx-data)]
+        (doseq [id ids
                 :let [c (get cm id)
                       d (and c (get-dispatcher c))]]
           (when c
-            (if (satisfies? IUpdateForFactParts d)
-              (when (fact-parts-match? c tx-data)
-                (run-query-and-render id c))
-              (run-query-and-render id c))))))))
+            (if-not (satisfies? IUpdateInAnimationFrame d)
+              (run-query-and-render c)
+              (do
+                (swap! render-queue conj id)
+                (when-not render-requested
+                  (set! render-requested true)
+                  (if (exists? js/requestAnimationFrame)
+                    (js/requestAnimationFrame render-all-queued)
+                    (js/setTimeout render-all-queued 16)))))))))))
 
 ;; Trying out pure-methods from OM as well
 
