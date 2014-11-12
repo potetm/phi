@@ -124,6 +124,7 @@
 (defonce ^:private component-map (atom {}))
 (defonce ^:private render-queue (atom #{}))
 (def ^:private render-requested false)
+(defonce ^:private fact-part-map (atom {}))
 
 (defn query* [c db]
   (let [d (get-dispatcher c)
@@ -165,17 +166,40 @@
             (js/requestAnimationFrame render-all-queued)
             (js/setTimeout render-all-queued 16)))))))
 
+(defn datom->fact-parts [d]
+  [[(.-e d)]
+   [(.-e d) (.-a d)]
+   [(.-e d) (.-a d) (.-v d)]
+   [nil (.-a d)]
+   [nil (.-a d) (.-v d)]
+   [nil nil (.-v d)]])
+
+(defn get-component-ids-for-tx-data [tx-data]
+  (let [fpm @fact-part-map]
+    (distinct
+      (concat
+        (mapcat
+          (fn [datom]
+            (mapcat
+              (partial get fpm)
+              (datom->fact-parts datom)))
+          tx-data)
+        (::no-parts fpm)))))
+
 (defn init-conn! [new-conn]
   (defonce conn new-conn)
   (d/listen!
     conn
     (fn [{:keys [tx-data]}]
-      (doseq [[id c] @component-map
-              :let [d (get-dispatcher c)]]
-        (if (satisfies? IUpdateForFactParts d)
-          (when (fact-parts-match? c tx-data)
-            (run-query-and-render id c))
-          (run-query-and-render id c))))))
+      (let [cm @component-map]
+        (doseq [id (get-component-ids-for-tx-data tx-data)
+                :let [c (get cm id)
+                      d (and c (get-dispatcher c))]]
+          (when c
+            (if (satisfies? IUpdateForFactParts d)
+              (when (fact-parts-match? c tx-data)
+                (run-query-and-render id c))
+              (run-query-and-render id c))))))))
 
 ;; Trying out pure-methods from OM as well
 
@@ -204,9 +228,15 @@
        this
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
-             id (gen-id)]
+             id (gen-id)
+             props (js->clj (.-props this))]
          (swap! component-map assoc id this)
          (swap! instance-atom assoc :id id)
+         (if (satisfies? IUpdateForFactParts d)
+           (doseq [fp (if (empty? props) (fact-parts d)
+                                         (fact-parts d props))]
+             (swap! fact-part-map update-in [fp] conj id))
+           (swap! fact-part-map update-in [::no-parts] conj id))
          (when (satisfies? ISubscribe d)
            (swap! instance-atom assoc :subscriber-keys (subscribers d)))
          (when (satisfies? IDidMount d)
@@ -217,8 +247,15 @@
        this
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
-             instance-vars @instance-atom]
-         (swap! component-map dissoc (:id instance-vars))
+             instance-vars @instance-atom
+             props (js->clj (.-props this))
+             id (:id instance-vars)]
+         (if (satisfies? IUpdateForFactParts d)
+           (doseq [fp (if (empty? props) (fact-parts d)
+                                         (fact-parts d props))]
+             (swap! fact-part-map update-in [fp] #(remove #{id} %)))
+           (swap! fact-part-map update-in [::no-parts] #(remove #{id} %)))
+         (swap! component-map dissoc id)
          (swap! instance-atom dissoc :id)
          (when (satisfies? ISubscribe d)
            (doseq [subscriber-key (:subscriber-keys instance-vars)]
@@ -240,15 +277,6 @@
        (let [d (get-dispatcher this)]
          (when (satisfies? IDidUpdate d)
            (did-update d this (js->clj prev-props) (:state @(get-instance-atom this)))))))})
-
-;; Idea: Add optional IUpdateForAttrs protocol and we can do a check like this on tx-data:
-;; https://github.com/someteam/acha/blob/master/src-cljs/acha.cljs#L430
-
-;; Also add optional IUpdateInAnimationFrame marker interface and we can
-;; queue updates to that component to run in js/requestAnimationFrame.
-;;
-;; Ideally the queue will be smart enough to overwrite duplicate updates to a component
-
 
 (defn component [d]
   (let [c (js/React.createClass
