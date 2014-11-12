@@ -3,8 +3,10 @@
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs.core.async :refer [chan] :as a]
             [cljs-uuid.core :as uuid]
+            [clojure.set :as set]
             [datascript :as d]
-            [sablono.core :refer-macros [html]]))
+            [sablono.core :refer-macros [html]])
+  (:import [goog.ui IdGenerator]))
 
 ;; Initialize
 
@@ -13,16 +15,6 @@
 (defonce subscribers-map (atom {}))
 (defonce publisher (chan 2048))
 (defonce publication (a/pub publisher :type))
-
-(defonce ^:private component-render-fns (atom #{}))
-
-(defn init-conn! [new-conn]
-  (defonce conn new-conn)
-  (d/listen!
-    conn
-    (fn [tx-report]
-      (doseq [render @component-render-fns]
-        (render tx-report)))))
 
 ;; Events
 
@@ -100,6 +92,9 @@
 (defn mounted? [component]
   (.isMounted component))
 
+(defn- gen-id []
+  (.getNextUniqueId (.getInstance IdGenerator)))
+
 (defn get-dispatcher [react-component]
   (aget react-component "__fluxme_dispatcher"))
 
@@ -109,32 +104,11 @@
 (defn init-instance-atom [react-component]
   (aset react-component "__fluxme_instance_atom" (atom {})))
 
-(defn query* [react-component dispatcher db]
-  (let [props (js->clj (.-props react-component))]
-    (if (empty? props)
-      (query dispatcher db)
-      (query dispatcher props db))))
-
-(defn run-full-query-and-update* [react-component dispatcher db]
-  (let [instance-atom (get-instance-atom react-component)
-        old-state (:state @instance-atom)
-        new-state (query* react-component dispatcher db)]
-    (when (not= old-state new-state)
-      (swap! instance-atom assoc :state new-state)
-      (.forceUpdate react-component))))
-
-(defn run-full-query-and-update [react-component dispatcher db]
-  (let [update #(run-full-query-and-update* react-component dispatcher db)]
-    (if (satisfies? IUpdateInAnimationFrame dispatcher)
-      (if (exists? js/requestAnimationFrame)
-        (js/requestAnimationFrame update)
-        (js/setTimeout update 16))
-      (update))))
-
-(defn fact-parts-match? [react-component dispatcher tx-data]
-  (let [props (js->clj (.-props react-component))
-        parts (if (empty? props) (fact-parts dispatcher)
-                                 (fact-parts dispatcher props))]
+(defn fact-parts-match? [component tx-data]
+  (let [props (js->clj (.-props component))
+        d (get-dispatcher component)
+        parts (if (empty? props) (fact-parts d)
+                                 (fact-parts d props))]
     (boolean
       (some
         (fn [[e a v]]
@@ -147,12 +121,61 @@
             tx-data))
         parts))))
 
-(defn update! [react-component dispatcher {:keys [tx-data db-after]}]
-  (when (mounted? react-component)
-    (if (satisfies? IUpdateForFactParts dispatcher)
-      (when (fact-parts-match? react-component dispatcher tx-data)
-        (run-full-query-and-update react-component dispatcher db-after))
-      (run-full-query-and-update react-component dispatcher db-after))))
+(defonce ^:private component-map (atom {}))
+(defonce ^:private render-queue (atom #{}))
+(def ^:private render-requested false)
+
+(defn query* [c db]
+  (let [d (get-dispatcher c)
+        props (js->clj (.-props c))]
+    (if (empty? props)
+      (query d db)
+      (query d props db))))
+
+(defn run-query-and-render* [c]
+  (let [instance-atom (get-instance-atom c)
+        old-state (:state @instance-atom)
+        new-state (query* c @conn)]
+    (when (and (mounted? c)
+               (not= old-state new-state))
+      (swap! instance-atom assoc :state new-state)
+      (.forceUpdate c))))
+
+(defn render-all-queued []
+  (let [cmap @component-map
+        _ (set! render-requested false)
+        queue (loop [q @render-queue]
+                (if (compare-and-set! render-queue q #{})
+                  q
+                  (recur @render-queue)))]
+    (doseq [id queue]
+      (when-let [c (get cmap id)]
+        (run-query-and-render* c)))))
+
+(defn run-query-and-render [id c]
+  (let [d (get-dispatcher c)
+        update #(run-query-and-render* c)]
+    (if-not (satisfies? IUpdateInAnimationFrame d)
+      (update)
+      (do
+        (swap! render-queue conj id)
+        (when-not render-requested
+          (set! render-requested true)
+          (if (exists? js/requestAnimationFrame)
+            (js/requestAnimationFrame render-all-queued)
+            (js/setTimeout render-all-queued 16)))))))
+
+(defn init-conn! [new-conn]
+  (defonce conn new-conn)
+  (d/listen!
+    conn
+    (fn [{:keys [tx-data]}]
+      (doseq [[id c] @component-map
+              :let [d (get-dispatcher c)]]
+        (if (satisfies? IUpdateForFactParts d)
+          (when (fact-parts-match? c tx-data)
+            (run-query-and-render id c))
+          (run-query-and-render id c))))))
 
 ;; Trying out pure-methods from OM as well
 
@@ -172,7 +195,7 @@
        this
        (let [d (get-dispatcher this)]
          (init-instance-atom this)
-         (swap! (get-instance-atom this) assoc :state (query* this d @conn))
+         (swap! (get-instance-atom this) assoc :state (query* this @conn))
          (when (satisfies? IWillMount d)
            (will-mount d this)))))
    :componentDidMount
@@ -181,9 +204,9 @@
        this
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
-             render (partial update! this d)]
-         (swap! component-render-fns conj render)
-         (swap! instance-atom assoc :render-fn render)
+             id (gen-id)]
+         (swap! component-map assoc id this)
+         (swap! instance-atom assoc :id id)
          (when (satisfies? ISubscribe d)
            (swap! instance-atom assoc :subscriber-keys (subscribers d)))
          (when (satisfies? IDidMount d)
@@ -195,8 +218,8 @@
        (let [d (get-dispatcher this)
              instance-atom (get-instance-atom this)
              instance-vars @instance-atom]
-         (swap! component-render-fns disj (:render-fn instance-vars))
-         (swap! instance-atom dissoc :render-fn)
+         (swap! component-map dissoc (:id instance-vars))
+         (swap! instance-atom dissoc :id)
          (when (satisfies? ISubscribe d)
            (doseq [subscriber-key (:subscriber-keys instance-vars)]
              (unsubscribe! subscriber-key))
