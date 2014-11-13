@@ -180,27 +180,44 @@
             tx-data)
           (::no-parts fpm))))))
 
-(defn init-conn! [new-conn]
+(defrecord Associative [conn]
+  IOptimizeUpdates
+  (-init-component [_ id c])
+  (-cleanup-component [_ id c])
+  (-get-component-ids-for-operation [_ op-data]
+    (keys @component-map)))
+
+(defn run-updates! [op-data]
+  (let [cm @component-map
+        ids (-get-component-ids-for-operation optimization-strategy op-data)]
+    (doseq [id ids
+            :let [c (get cm id)
+                  d (and c (get-dispatcher c))]]
+      (when c
+        (if-not (satisfies? IUpdateInAnimationFrame d)
+          (run-query-and-render c)
+          (do
+            (swap! render-queue conj id)
+            (when-not render-requested
+              (set! render-requested true)
+              (if (exists? js/requestAnimationFrame)
+                (js/requestAnimationFrame render-all-queued)
+                (js/setTimeout render-all-queued 16)))))))))
+
+(defn init-datascript-conn! [new-conn]
   (defonce conn new-conn)
   (defonce optimization-strategy (->Datascript conn (atom {})))
   (d/listen!
     conn
     (fn [{:keys [tx-data]}]
-      (let [cm @component-map
-            ids (-get-component-ids-for-operation optimization-strategy tx-data)]
-        (doseq [id ids
-                :let [c (get cm id)
-                      d (and c (get-dispatcher c))]]
-          (when c
-            (if-not (satisfies? IUpdateInAnimationFrame d)
-              (run-query-and-render c)
-              (do
-                (swap! render-queue conj id)
-                (when-not render-requested
-                  (set! render-requested true)
-                  (if (exists? js/requestAnimationFrame)
-                    (js/requestAnimationFrame render-all-queued)
-                    (js/setTimeout render-all-queued 16)))))))))))
+      (run-updates! tx-data))))
+
+(defn init-associative-conn! [new-conn]
+  (defonce conn new-conn)
+  (defonce optimization-strategy (->Associative conn))
+  (add-watch conn :updates
+    (fn [_conn _key _old-val new-val]
+      (run-updates! new-val))))
 
 ;; Trying out pure-methods from OM as well
 
