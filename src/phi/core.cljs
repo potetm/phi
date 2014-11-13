@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [js->clj])
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs.core.async :refer [chan] :as a]
-            [cljs-uuid.core :as uuid]
             [clojure.set :as set]
             [datascript :as d]
             [sablono.core :refer-macros [html]])
@@ -21,9 +20,12 @@
 
 (defrecord Event [id type db subjects])
 
+(defn- gen-id []
+  (.getNextUniqueId (.getInstance IdGenerator)))
+
 (defn event [type db subjects]
   (->Event
-    (uuid/make-random)
+    (gen-id)
     type
     db
     subjects))
@@ -92,9 +94,6 @@
 
 (defn mounted? [component]
   (.isMounted component))
-
-(defn- gen-id []
-  (.getNextUniqueId (.getInstance IdGenerator)))
 
 (defn get-dispatcher [react-component]
   (aget react-component "__phi_dispatcher"))
