@@ -1,4 +1,4 @@
-(ns fluxme.core
+(ns phi.core
   (:refer-clojure :exclude [js->clj])
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs.core.async :refer [chan] :as a]
@@ -66,7 +66,7 @@
 
 ;; My additions
 
-(defprotocol IFlux
+(defprotocol IPhi
   (query [this db]
          [this props db])
   (render [this v]
@@ -97,13 +97,13 @@
   (.getNextUniqueId (.getInstance IdGenerator)))
 
 (defn get-dispatcher [react-component]
-  (aget react-component "__fluxme_dispatcher"))
+  (aget react-component "__phi_dispatcher"))
 
 (defn get-instance-atom [react-component]
-  (aget react-component "__fluxme_instance_atom"))
+  (aget react-component "__phi_instance_atom"))
 
 (defn init-instance-atom [react-component]
-  (aset react-component "__fluxme_instance_atom" (atom {})))
+  (aset react-component "__phi_instance_atom" (atom {})))
 
 (defonce ^:private component-map (atom {}))
 (defonce ^:private render-queue (atom #{}))
@@ -300,7 +300,7 @@
                        (html (if (empty? props)
                                (render d (:state instance-state))
                                (render d props (:state instance-state)))))))
-                 :__fluxme_dispatcher
+                 :__phi_dispatcher
                  d})))]
     (fn [& [props]]
       (js/React.createElement c (clj->js props)))))

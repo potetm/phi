@@ -1,6 +1,6 @@
-(defproject fluxme "0.1.0-SNAPSHOT"
+(defproject phi "0.1.0-SNAPSHOT"
   :description "A library for fluxing the frontend"
-  :url "https://github.com/potetm/fluxme"
+  :url "https://github.com/potetm/phi"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :jvm-opts ^:replace ["-Xms1g" "-Xmx1g" "-server"]
@@ -18,4 +18,4 @@
                 :compiler     {:optimizations :whitespace
                                :pretty-print  true
                                :preamble      ["react/react.js"]
-                               :output-to     "target/fluxme.js"}}]})
+                               :output-to     "target/phi.js"}}]})
