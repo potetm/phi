@@ -1,19 +1,18 @@
 (ns phi.core
   (:refer-clojure :exclude [js->clj])
-  (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs.core.async :refer [chan] :as a]
-            [clojure.set :as set]
             [datascript :as d]
-            [sablono.core :refer-macros [html]])
-  (:import [goog.ui IdGenerator]))
+            [sablono.core :refer-macros [html]]))
 
 ;; Initialize
 
 (declare conn)
+(def ^{:dynamic true :private true} *db*)
+
 (declare optimization-strategy)
 
 (defonce subscribers-map (atom {}))
-(defonce publisher (chan 2048))
+(defonce publisher (chan 1024))
 (defonce publication (a/pub publisher :type))
 
 ;; Events
@@ -21,7 +20,7 @@
 (defrecord Event [id type db subjects])
 
 (defn- gen-id []
-  (.getNextUniqueId (.getInstance IdGenerator)))
+  (goog/getUid))
 
 (defn event [type db subjects]
   (->Event
@@ -71,8 +70,8 @@
 (defprotocol IPhi
   (query [this db]
          [this props db])
-  (render [this v]
-          [this props v]))
+  (render [this db v]
+          [this db props v]))
 
 (defprotocol ISubscribe
   (subscribers [this]))
@@ -95,214 +94,182 @@
 (defn mounted? [component]
   (.isMounted component))
 
-(defn get-dispatcher [react-component]
-  (aget react-component "__phi_dispatcher"))
+(defprotocol IGetDb
+  (-get-db [this]))
 
-(defn get-instance-atom [react-component]
-  (aget react-component "__phi_instance_atom"))
+(defprotocol IGetProps
+  (-get-props [this]))
 
-(defn init-instance-atom [react-component]
-  (aset react-component "__phi_instance_atom" (atom {})))
+(defprotocol IGetComponentState
+  (-get-state [this]))
 
-(defonce ^:private component-map (atom {}))
-(defonce ^:private render-queue (atom #{}))
-(def ^:private render-requested false)
+(defprotocol ISetComponentState
+  (-set-state [this state]))
 
-(defn query* [c db]
-  (let [d (get-dispatcher c)
-        props (js->clj (.-props c))]
-    (if (empty? props)
-      (query d db)
-      (query d props db))))
-
-(defn run-query-and-render [c]
-  (let [instance-atom (get-instance-atom c)
-        old-state (:state @instance-atom)
-        new-state (query* c @conn)]
-    (when (and (mounted? c)
-               (not= old-state new-state))
-      (swap! instance-atom assoc :state new-state)
-      (.forceUpdate c))))
-
-(defn render-all-queued []
-  (let [cmap @component-map
-        _ (set! render-requested false)
-        queue (loop [q @render-queue]
-                (if (compare-and-set! render-queue q #{})
-                  q
-                  (recur @render-queue)))]
-    (doseq [id queue]
-      (when-let [c (get cmap id)]
-        (run-query-and-render c)))))
-
-(defprotocol IOptimizeUpdates
-  (-init-component [this id component])
-  (-cleanup-component [this id component])
-  (-get-component-ids-for-operation [this op-data]))
-
-(defn datom->fact-parts [d]
-  [[(.-e d)]
-   [(.-e d) (.-a d)]
-   [(.-e d) (.-a d) (.-v d)]
-   [nil (.-a d)]
-   [nil (.-a d) (.-v d)]
-   [nil nil (.-v d)]])
-
-(defrecord Datascript [conn fact-part-map-atom]
-  IOptimizeUpdates
-  (-init-component [_ id c]
-    (let [d (get-dispatcher c)
-          props (js->clj (.-props c))]
-      (if (satisfies? IUpdateForFactParts d)
-        (doseq [fp (if (empty? props)
-                     (fact-parts d)
-                     (fact-parts d props))]
-          (swap! fact-part-map-atom update-in [fp] conj id))
-        (swap! fact-part-map-atom update-in [::no-parts] conj id))))
-  (-cleanup-component [_ id c]
-    (let [d (get-dispatcher c)
-          props (js->clj (.-props c))]
-      (if (satisfies? IUpdateForFactParts d)
-        (doseq [fp (if (empty? props) (fact-parts d)
-                                      (fact-parts d props))]
-          (swap! fact-part-map-atom update-in [fp] #(remove #{id} %)))
-        (swap! fact-part-map-atom update-in [::no-parts] #(remove #{id} %)))))
-  (-get-component-ids-for-operation [_ tx-data]
-    (let [fpm @fact-part-map-atom]
-      (distinct
-        (concat
-          (mapcat
-            (fn [datom]
-              (mapcat
-                (partial get fpm)
-                (datom->fact-parts datom)))
-            tx-data)
-          (::no-parts fpm))))))
-
-(defrecord Associative [conn]
-  IOptimizeUpdates
-  (-init-component [_ id c])
-  (-cleanup-component [_ id c])
-  (-get-component-ids-for-operation [_ op-data]
-    (keys @component-map)))
-
-(defn run-updates! [op-data]
-  (let [cm @component-map
-        ids (-get-component-ids-for-operation optimization-strategy op-data)]
-    (doseq [id ids
-            :let [c (get cm id)
-                  d (and c (get-dispatcher c))]]
-      (when c
-        (if-not (satisfies? IUpdateInAnimationFrame d)
-          (run-query-and-render c)
-          (do
-            (swap! render-queue conj id)
-            (when-not render-requested
-              (set! render-requested true)
-              (if (exists? js/requestAnimationFrame)
-                (js/requestAnimationFrame render-all-queued)
-                (js/setTimeout render-all-queued 16)))))))))
-
-(defn init-datascript-conn! [new-conn]
-  (defonce conn new-conn)
-  (defonce optimization-strategy (->Datascript conn (atom {})))
-  (d/listen!
-    conn
-    (fn [{:keys [tx-data]}]
-      (run-updates! tx-data))))
-
-(defn init-associative-conn! [new-conn]
-  (defonce conn new-conn)
-  (defonce optimization-strategy (->Associative conn))
-  (add-watch conn :updates
-    (fn [_conn _key _old-val new-val]
-      (run-updates! new-val))))
+(defprotocol IGetDispatcher
+  (-get-dispatcher [this]))
 
 ;; Trying out pure-methods from OM as well
 
-(def pure-methods
+(def lifecycle-methods
   {:getDisplayName
    (fn []
      (this-as
        this
-       (let [d (get-dispatcher this)]
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IDisplayName d)
            (display-name d this)))))
-   :shouldComponentUpdate
-   (constantly false)
    :componentWillMount
    (fn []
      (this-as
        this
-       (let [d (get-dispatcher this)]
-         (init-instance-atom this)
-         (swap! (get-instance-atom this) assoc :state (query* this @conn))
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IWillMount d)
            (will-mount d this)))))
    :componentDidMount
    (fn []
      (this-as
        this
-       (let [d (get-dispatcher this)
-             instance-atom (get-instance-atom this)
-             id (gen-id)]
-         (swap! component-map assoc id this)
-         (swap! instance-atom assoc :id id)
-         (-init-component optimization-strategy id this)
-         (when (satisfies? ISubscribe d)
-           (swap! instance-atom assoc :subscriber-keys (subscribers d)))
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
    :componentWillUnmount
    (fn []
      (this-as
        this
-       (let [d (get-dispatcher this)
-             instance-atom (get-instance-atom this)
-             instance-vars @instance-atom
-             id (:id instance-vars)]
-         (swap! component-map dissoc id)
-         (swap! instance-atom dissoc :id)
-         (-cleanup-component optimization-strategy id this)
-         (when (satisfies? ISubscribe d)
-           (doseq [subscriber-key (:subscriber-keys instance-vars)]
-             (unsubscribe! subscriber-key))
-           (swap! instance-atom dissoc :subscriber-keys))
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IWillUnmount d)
            (will-unmount d this)))))
    :componentWillUpdate
    (fn [next-props _next-state]
      (this-as
        this
-       (let [d (get-dispatcher this)]
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IWillUpdate d)
-           (will-update d this (js->clj next-props) (:state @(get-instance-atom this)))))))
+           (will-update d this (aget next-props "__phi_props") nil)))))
    :componentDidUpdate
    (fn [prev-props _prev-state]
      (this-as
        this
-       (let [d (get-dispatcher this)]
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IDidUpdate d)
-           (did-update d this (js->clj prev-props) (:state @(get-instance-atom this)))))))})
+           (did-update d this (aget prev-props "__phi_props") nil)))))
+   :render
+   (fn []
+     (this-as
+       this
+       (let [d (-get-dispatcher this)
+             state (-get-state this)
+             props (-get-props this)]
+         (html (if (empty? props)
+                 (render d (-get-db this) state)
+                 (render d (-get-db this) props state))))))})
+
+(defn- specify-state-methods! [desc]
+  (specify! desc
+    IGetDb
+    (-get-db
+      ([this]
+       (aget (.-props this) "__phi_db")))
+    IGetProps
+    (-get-props
+      ([this]
+       (aget (.-props this) "__phi_props")))
+    IGetComponentState
+    (-get-state
+      ([this]
+       (aget (.-props this) "__phi_component_state")))
+    IGetDispatcher
+    (-get-dispatcher
+      ([this]
+       (aget this "__phi_dispatcher")))))
+
+(defn query* [d props db]
+  (if (empty? props)
+    (query d db)
+    (query d props db)))
 
 (defn component [d]
   (let [c (js/React.createClass
-            (clj->js
-              (merge
-                pure-methods
-                {:render
-                 (fn []
-                   (this-as
-                     this
-                     (let [instance-state @(get-instance-atom this)
-                           props (js->clj (.-props this))]
-                       (html (if (empty? props)
-                               (render d (:state instance-state))
-                               (render d props (:state instance-state)))))))
-                 :__phi_dispatcher
-                 d})))]
-    (fn [& [props]]
-      (js/React.createElement c (clj->js props)))))
+            (specify-state-methods!
+              (clj->js
+                (merge
+                  lifecycle-methods
+                  {:__phi_dispatcher d}))))]
+    (fn [db & [props]]
+      (js/React.createElement c
+                              #js {:__phi_db db
+                                   :__phi_props props
+                                   :__phi_component_state (query* d props db)}))))
+
+(defprotocol ITxNotify
+  (-register! [this key callback])
+  (-unregister! [this key]))
+
+(deftype IDatascriptConn [conn]
+  IDeref
+  (-deref [_]
+    @conn)
+  ITxNotify
+  (-register! [_ key callback]
+    (d/listen! conn key callback))
+  (-unregister! [_ key]
+    (d/unlisten! conn key)))
+
+(deftype IAssociativeConn [conn]
+  IDeref
+  (-deref [_]
+    @conn)
+  IReset
+  (-reset! [_ f]
+    (reset! conn f))
+  ISwap
+  (-swap! [_ f]
+    (swap! conn f))
+  (-swap! [_ f a]
+    (swap! conn f a))
+  (-swap! [_ f a b]
+    (swap! conn f a b))
+  (-swap! [_ f a b xs]
+    (swap! conn f a b xs))
+  ITxNotify
+  (-register! [_ key callback]
+    (add-watch conn key callback))
+  (-unregister! [_ key]
+    (remove-watch conn key)))
+
+(defn init-datascript-conn! [new-conn]
+  (defonce conn (->IDatascriptConn new-conn)))
+
+(defn init-associative-conn! [new-conn]
+  (defonce conn (->IAssociativeConn new-conn)))
+
+(defonce ^:private render-queue (atom #{}))
+(def ^:private render-requested false)
+
+(defn render-all-queued []
+  (set! render-requested false)
+  (let [render-fns (loop [queue @render-queue]
+                     (if (compare-and-set! render-queue queue #{})
+                       queue
+                       (recur @render-queue)))
+        db @conn]
+    (doseq [render render-fns]
+      (render db))))
 
 (defn mount-app [app mount-point]
-  (js/React.renderComponent app mount-point))
+  (let [id (gen-id)
+        render-from-root (fn [db]
+                           (js/React.renderComponent
+                             (app db)
+                             mount-point))]
+    (-register!
+      conn id
+      (fn []
+        (swap! render-queue conj render-from-root)
+        (when-not render-requested
+          (set! render-requested true)
+          (if (exists? js/requestAnimationFrame)
+            (js/requestAnimationFrame render-all-queued)
+            (js/setTimeout render-all-queued 16)))))
+    (render-from-root @conn)))
