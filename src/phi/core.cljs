@@ -7,20 +7,19 @@
 ;; Initialize
 
 (declare conn)
-(def ^{:dynamic true :private true} *db*)
-
-(declare optimization-strategy)
-
-(defonce subscribers-map (atom {}))
-(defonce publisher (chan 1024))
-(defonce publication (a/pub publisher :type))
 
 ;; Events
+
+(defonce ^:private subscribers-map (atom {}))
+(defonce ^:private publisher (chan 1024))
+(defonce ^:private publication (a/pub publisher :type))
 
 (defrecord Event [id type db subjects])
 
 (defn- gen-id [identifier]
   (gevent/getUniqueId identifier))
+
+;; Public API
 
 (defn event [type db subjects]
   (->Event
@@ -58,8 +57,7 @@
 (defn mounted? [component]
   (.isMounted component))
 
-;; Render
-;; React Lifecycle protocols from OM
+;; React Lifecycle protocols (obviously borrowed from om)
 
 (defprotocol IDisplayName
   (display-name [this component]))
@@ -82,11 +80,13 @@
 ;; My additions
 
 (defprotocol IPhi
+  "The bare minimum protocol you must implement
+   to be a phi component."
   (render [this db]
           [this db props]))
 
 (defprotocol ISubscribe
-  (subscribers [this]))
+  (init-subscribers [this]))
 
 (defprotocol IGetSubscriberKeys
   (-get-subscriber-keys [this]))
@@ -96,6 +96,9 @@
 
 (defprotocol IGetDb
   (-get-db [this]))
+
+(defprotocol ISetDb
+  (-set-db [this db]))
 
 (defprotocol IGetProps
   (-get-props [this]))
@@ -107,9 +110,15 @@
   (-register! [this key callback])
   (-unregister! [this key]))
 
-;; Trying out pure-methods from OM as well
+(defprotocol IUpdateImmediately
+  "Marker protocol for indicating you want this component
+   to be updated immediately after each db update.
 
-(def lifecycle-methods
+   i.e. it will updated outside of js/requestAnimationFrame.")
+
+(def ^:private update-immediately (atom #{}))
+
+(def ^:private lifecycle-methods
   {:getDisplayName
    (fn []
      (this-as
@@ -129,8 +138,10 @@
      (this-as
        this
        (let [d (-get-dispatcher this)]
+         (when (satisfies? IUpdateImmediately d)
+           (swap! update-immediately conj this))
          (when (satisfies? ISubscribe d)
-           (-set-subscriber-keys this (subscribers d)))
+           (-set-subscriber-keys this (init-subscribers d)))
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
    :componentWillUnmount
@@ -138,6 +149,8 @@
      (this-as
        this
        (let [d (-get-dispatcher this)]
+         (when (satisfies? IUpdateImmediately d)
+           (swap! update-immediately disj this))
          (when (satisfies? ISubscribe d)
            (doseq [chan-key (-get-subscriber-keys this)]
              (unsubscribe! chan-key)))
@@ -173,6 +186,10 @@
     (-get-db
       ([this]
         (aget (.-props this) "__phi_db")))
+    ISetDb
+    (-set-db
+      [this db]
+      (aset (.-props this) "__phi_db" db))
     IGetProps
     (-get-props
       ([this]
@@ -236,7 +253,10 @@
     (swap! conn f a b xs))
   ITxNotify
   (-register! [_ key callback]
-    (add-watch conn key callback))
+    (add-watch conn key
+      (fn [_key _conn old-state new-state]
+        (callback {:db-before old-state
+                   :db-after new-state}))))
   (-unregister! [_ key]
     (remove-watch conn key)))
 
@@ -244,7 +264,7 @@
 (defonce ^:private render-queue (atom #{}))
 (def ^:private render-requested false)
 
-(defn render-all-queued []
+(defn- render-all-queued []
   (set! render-requested false)
   (let [render-fns (loop [queue @render-queue]
                      (if (compare-and-set! render-queue queue #{})
@@ -253,6 +273,8 @@
         db @conn]
     (doseq [render render-fns]
       (render db))))
+
+;; Public API
 
 (defn component [d]
   (let [c (js/React.createClass
@@ -280,7 +302,11 @@
                              mount-point))]
     (-register!
       conn id
-      (fn []
+      (fn [tx-report]
+        (doseq [c @update-immediately]
+          (-set-db c (:db-after tx-report))
+          (.forceUpdate c))
+        ;; this pattern is basically yanked from om
         (swap! render-queue conj render-from-root)
         (when-not render-requested
           (set! render-requested true)
