@@ -1,7 +1,7 @@
 (ns phi.core
-  (:refer-clojure :exclude [js->clj])
   (:require [cljs.core.async :refer [chan] :as a]
             [datascript :as d]
+            [goog.events :as gevent]
             [sablono.core :refer-macros [html]]))
 
 ;; Initialize
@@ -19,12 +19,12 @@
 
 (defrecord Event [id type db subjects])
 
-(defn- gen-id []
-  (goog/getUid))
+(defn- gen-id [identifier]
+  (gevent/getUniqueId identifier))
 
 (defn event [type db subjects]
   (->Event
-    (gen-id)
+    (gen-id "phi_event")
     type
     db
     subjects))
@@ -44,6 +44,20 @@
   {:pre [(instance? Event e)]}
   (a/put! publisher e))
 
+;; Helpers
+
+(defn get-ref [component ref]
+  (aget (.-refs component) ref))
+
+(defn get-dom-node [component]
+  (.getDOMNode component))
+
+(defn get-child-node [component ref]
+  (get-dom-node (get-ref component ref)))
+
+(defn mounted? [component]
+  (.isMounted component))
+
 ;; Render
 ;; React Lifecycle protocols from OM
 
@@ -60,39 +74,25 @@
   (will-unmount [this component]))
 
 (defprotocol IWillUpdate
-  (will-update [this component next-props next-state]))
+  (will-update [this component next-props next-db]))
 
 (defprotocol IDidUpdate
-  (did-update [this component prev-props prev-state]))
+  (did-update [this component prev-props prev-db]))
 
 ;; My additions
 
 (defprotocol IPhi
-  (query [this db]
-         [this props db])
-  (render [this db v]
-          [this db props v]))
+  (render [this db]
+          [this db props]))
 
 (defprotocol ISubscribe
   (subscribers [this]))
 
-(defprotocol IUpdateForFactParts
-  (fact-parts [this]
-              [this props]))
+(defprotocol IGetSubscriberKeys
+  (-get-subscriber-keys [this]))
 
-(defprotocol IUpdateInAnimationFrame)
-
-(defn js->clj [form]
-  (cljs.core/js->clj form :keywordize-keys true))
-
-(defn get-ref [component ref]
-  (aget (.-refs component) ref))
-
-(defn get-dom-node [component]
-  (.getDOMNode component))
-
-(defn mounted? [component]
-  (.isMounted component))
+(defprotocol ISetSubscriberKeys
+  (-set-subscriber-keys [this subscribers]))
 
 (defprotocol IGetDb
   (-get-db [this]))
@@ -100,14 +100,12 @@
 (defprotocol IGetProps
   (-get-props [this]))
 
-(defprotocol IGetComponentState
-  (-get-state [this]))
-
-(defprotocol ISetComponentState
-  (-set-state [this state]))
-
 (defprotocol IGetDispatcher
   (-get-dispatcher [this]))
+
+(defprotocol ITxNotify
+  (-register! [this key callback])
+  (-unregister! [this key]))
 
 ;; Trying out pure-methods from OM as well
 
@@ -131,6 +129,8 @@
      (this-as
        this
        (let [d (-get-dispatcher this)]
+         (when (satisfies? ISubscribe d)
+           (-set-subscriber-keys this (subscribers d)))
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
    :componentWillUnmount
@@ -138,6 +138,9 @@
      (this-as
        this
        (let [d (-get-dispatcher this)]
+         (when (satisfies? ISubscribe d)
+           (doseq [chan-key (-get-subscriber-keys this)]
+             (unsubscribe! chan-key)))
          (when (satisfies? IWillUnmount d)
            (will-unmount d this)))))
    :componentWillUpdate
@@ -146,70 +149,66 @@
        this
        (let [d (-get-dispatcher this)]
          (when (satisfies? IWillUpdate d)
-           (will-update d this (aget next-props "__phi_props") nil)))))
+           (will-update d this (aget next-props "__phi_props") (aget next-props "__phi_db"))))))
    :componentDidUpdate
    (fn [prev-props _prev-state]
      (this-as
        this
        (let [d (-get-dispatcher this)]
          (when (satisfies? IDidUpdate d)
-           (did-update d this (aget prev-props "__phi_props") nil)))))
+           (did-update d this (aget prev-props "__phi_props") (aget prev-props "__phi_db"))))))
    :render
    (fn []
      (this-as
        this
        (let [d (-get-dispatcher this)
-             state (-get-state this)
              props (-get-props this)]
          (html (if (empty? props)
-                 (render d (-get-db this) state)
-                 (render d (-get-db this) props state))))))})
+                 (render d (-get-db this))
+                 (render d (-get-db this) props))))))})
 
 (defn- specify-state-methods! [desc]
   (specify! desc
     IGetDb
     (-get-db
       ([this]
-       (aget (.-props this) "__phi_db")))
+        (aget (.-props this) "__phi_db")))
     IGetProps
     (-get-props
       ([this]
-       (aget (.-props this) "__phi_props")))
-    IGetComponentState
-    (-get-state
-      ([this]
-       (aget (.-props this) "__phi_component_state")))
+        (aget (.-props this) "__phi_props")))
     IGetDispatcher
     (-get-dispatcher
       ([this]
-       (aget this "__phi_dispatcher")))))
-
-(defn query* [d props db]
-  (if (empty? props)
-    (query d db)
-    (query d props db)))
-
-(defn component [d]
-  (let [c (js/React.createClass
-            (specify-state-methods!
-              (clj->js
-                (merge
-                  lifecycle-methods
-                  {:__phi_dispatcher d}))))]
-    (fn [db & [props]]
-      (js/React.createElement c
-                              #js {:__phi_db db
-                                   :__phi_props props
-                                   :__phi_component_state (query* d props db)}))))
-
-(defprotocol ITxNotify
-  (-register! [this key callback])
-  (-unregister! [this key]))
+        (aget this "__phi_dispatcher")))
+    IGetSubscriberKeys
+    (-get-subscriber-keys
+      ([this]
+        (aget this "__phi_subscriber_keys")))
+    ISetSubscriberKeys
+    (-set-subscriber-keys
+      [this subs]
+      (aset this "__phi_subscriber_keys" subs))))
 
 (deftype IDatascriptConn [conn]
+  IMeta
+  (-meta [_]
+    (meta conn))
   IDeref
   (-deref [_]
     @conn)
+  IReset
+  (-reset! [_ f]
+    (reset! conn f))
+  ISwap
+  (-swap! [_ f]
+    (swap! conn f))
+  (-swap! [_ f a]
+    (swap! conn f a))
+  (-swap! [_ f a b]
+    (swap! conn f a b))
+  (-swap! [_ f a b xs]
+    (swap! conn f a b xs))
   ITxNotify
   (-register! [_ key callback]
     (d/listen! conn key callback))
@@ -217,6 +216,9 @@
     (d/unlisten! conn key)))
 
 (deftype IAssociativeConn [conn]
+  IMeta
+  (-meta [_]
+    (meta conn))
   IDeref
   (-deref [_]
     @conn)
@@ -238,12 +240,7 @@
   (-unregister! [_ key]
     (remove-watch conn key)))
 
-(defn init-datascript-conn! [new-conn]
-  (defonce conn (->IDatascriptConn new-conn)))
-
-(defn init-associative-conn! [new-conn]
-  (defonce conn (->IAssociativeConn new-conn)))
-
+(defonce ^:private cleanup-fns (atom {}))
 (defonce ^:private render-queue (atom #{}))
 (def ^:private render-requested false)
 
@@ -257,8 +254,26 @@
     (doseq [render render-fns]
       (render db))))
 
+(defn component [d]
+  (let [c (js/React.createClass
+            (specify-state-methods!
+              (clj->js
+                (merge
+                  lifecycle-methods
+                  {:__phi_dispatcher d}))))]
+    (fn [db & [props]]
+      (js/React.createElement c
+                              #js {:__phi_db db
+                                   :__phi_props props}))))
+
+(defn init-datascript-conn! [new-conn]
+  (defonce conn (IDatascriptConn. new-conn)))
+
+(defn init-associative-conn! [new-conn]
+  (defonce conn (IAssociativeConn. new-conn)))
+
 (defn mount-app [app mount-point]
-  (let [id (gen-id)
+  (let [id (gen-id "phi_component")
         render-from-root (fn [db]
                            (js/React.renderComponent
                              (app db)
@@ -272,4 +287,13 @@
           (if (exists? js/requestAnimationFrame)
             (js/requestAnimationFrame render-all-queued)
             (js/setTimeout render-all-queued 16)))))
+    (swap! cleanup-fns assoc mount-point
+           (fn []
+             (-unregister! conn id)
+             (swap! cleanup-fns dissoc mount-point)
+             (js/React.unmountComponentAtNode mount-point)))
     (render-from-root @conn)))
+
+(defn unmount-app [mount-point]
+  (when-let [f (get @cleanup-fns mount-point)]
+    (f)))
