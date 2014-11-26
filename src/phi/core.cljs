@@ -50,13 +50,13 @@
                  :chan-key chan-key
                  :buf-or-n buf-or-n
                  :event-types event-types
-                 :value v
-                 :error e}))))
+                 :value v}))
+            (js/console.error (.-stack e))))
         (recur)))))
 
-(defn subscription-table
+(defn routing-table
   ([buf-or-n desc]
-    (subscription-table
+    (routing-table
       (mapcat
         (fn [[events f]]
           [events buf-or-n f])

@@ -15,6 +15,6 @@
                {:message "exception thrown while executing subscriber body"
                 :chan-key chan-key#
                 :buf-or-n ~buf-or-n
-                :event-types ~event-types
-                :error e#})))))
+                :event-types ~event-types}))
+           (js/console.error (.-stack e#)))))
      chan-key#))

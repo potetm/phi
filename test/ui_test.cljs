@@ -11,6 +11,7 @@
   "my-fn-1")
 
 (defn my-fn-2 [e]
+  (throw (js/Error. "test"))
   "my-fn-2")
 
 (def app
@@ -21,7 +22,7 @@
         [:div "HELLO"])
       phi/ISubscribe
       (init-subscribers [_]
-        (phi/subscription-table
+        (phi/routing-table
           [[::event] (a/sliding-buffer 10) my-fn-1
            [::event] (a/sliding-buffer 10) my-fn-2])))))
 
