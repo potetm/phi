@@ -1,7 +1,6 @@
 (ns phi.core
   (:require-macros [cljs.core.async.macros :refer [go-loop]])
   (:require [cljs.core.async :refer [chan <!] :as a]
-            [datascript :as d]
             [sablono.core :refer-macros [html]])
   (:import [goog.ui IdGenerator]))
 
@@ -40,28 +39,38 @@
   (let [c (chan buf-or-n)]
     (unsubscribe! chan-key)
     (subscribe! c chan-key event-types)
-    (try
-      (go-loop []
-        (when-some [v (<! c)]
+    (go-loop []
+      (when-some [v (<! c)]
+        (try
           (callback v)
-          (recur)))
-      (catch js/Error e
-        (unsubscribe! chan-key)
-        (js/console.log
-          (ex-info
-            "exception while initializing subscriber"
-            {:subscriber chan-key
-             :buf-or-n buf-or-n
-             :event-types event-types}
-            e))))))
+          (catch js/Error e
+            (js/console.error
+              (clj->js
+                {:message "Error executing subscriber"
+                 :chan-key chan-key
+                 :buf-or-n buf-or-n
+                 :event-types event-types
+                 :value v
+                 :error e}))))
+        (recur)))))
 
-(defn subscription-table [desc]
-  (doall
-    (for [[events buf-or-n f] (partition 3 desc)
-          :let [chan-key (keyword (.-name f))]]
-      (do
-        (subscribe-callback! chan-key buf-or-n events f)
-        chan-key))))
+(defn subscription-table
+  ([buf-or-n desc]
+    (subscription-table
+      (mapcat
+        (fn [[events f]]
+          [events buf-or-n f])
+        (partition 2 desc))))
+  ([desc]
+    (doall
+      (for [[events buf-or-n f] (partition 3 desc)
+            ;; gensym to guarantee uniqueness; .-name to give useful feedback
+            :let [n (.-name f)
+                  chan-key (keyword (str (gensym))
+                                    (if (seq n) n "anonymous-fn"))]]
+        (do
+          (subscribe-callback! chan-key buf-or-n events f)
+          chan-key)))))
 
 (defn publish! [^Event e]
   {:pre [(instance? Event e)]}
@@ -118,7 +127,8 @@
   (render-props [this props]))
 
 (defprotocol ISubscribe
-  (init-subscribers [this]))
+  (init-subscribers [this]
+                    [this props]))
 
 (defprotocol IGetSubscriberKeys
   (-get-subscriber-keys [this]))
@@ -184,7 +194,11 @@
          (when (satisfies? IUpdateImmediately d)
            (swap! update-immediately conj this))
          (when (satisfies? ISubscribe d)
-           (-set-subscriber-keys this (init-subscribers d)))
+           (let [props (-get-props this)
+                 sub-keys (if (seq props)
+                            (init-subscribers d props)
+                            (init-subscribers d))]
+             (-set-subscriber-keys this sub-keys)))
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
    :componentWillUnmount
@@ -253,32 +267,7 @@
       [this subs]
       (aset this "__phi_subscriber_keys" subs))))
 
-(deftype IDatascriptConn [conn]
-  IMeta
-  (-meta [_]
-    (meta conn))
-  IDeref
-  (-deref [_]
-    @conn)
-  IReset
-  (-reset! [_ f]
-    (reset! conn f))
-  ISwap
-  (-swap! [_ f]
-    (swap! conn f))
-  (-swap! [_ f a]
-    (swap! conn f a))
-  (-swap! [_ f a b]
-    (swap! conn f a b))
-  (-swap! [_ f a b xs]
-    (swap! conn f a b xs))
-  ITxNotify
-  (-register! [_ key callback]
-    (d/listen! conn key callback))
-  (-unregister! [_ key]
-    (d/unlisten! conn key)))
-
-(deftype IAssociativeConn [conn]
+(deftype Conn [conn]
   IMeta
   (-meta [_]
     (meta conn))
@@ -338,13 +327,12 @@
           #js {:__phi_db db
                :__phi_props props})))))
 
-(defn init-datascript-conn! [new-conn]
-  (defonce conn (IDatascriptConn. new-conn)))
-
-(defn init-associative-conn! [new-conn]
-  (defonce conn (IAssociativeConn. new-conn)))
+(defn init-conn! [new-conn]
+  (defonce conn (Conn. new-conn)))
 
 (defn mount-app [app mount-point]
+  (when (undefined? conn)
+    (js/console.debug "Attempt to mount app before calling init-conn!"))
   (let [id (gen-id)
         render-from-root (fn [db]
                            (js/React.renderComponent

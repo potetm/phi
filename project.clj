@@ -1,5 +1,5 @@
 (defproject
-  phi "0.2.0"
+  phi "0.3.0-SNAPSHOT"
   :description "A framework for fluxing the frontend"
   :url "https://github.com/potetm/phi"
   :license {:name "Eclipse Public License"
@@ -7,7 +7,6 @@
   :jvm-opts ^:replace ["-Xms1g" "-Xmx1g"]
   :source-paths ["src"]
   :dependencies [[com.facebook/react "0.11.2"]
-                 [datascript "0.5.2" :scope "provided"]
                  [org.clojure/clojure "1.6.0"]
                  [org.clojure/clojurescript "0.0-2371" :scope "provided"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha" :scope "provided"]
@@ -19,4 +18,10 @@
                 :compiler {:optimizations :whitespace
                            :pretty-print true
                            :preamble ["react/react.js"]
-                           :output-to "target/phi.js"}}]})
+                           :output-to "target/phi.js"}}
+               {:id "ui-test"
+                :source-paths ["src" "test"]
+                :compiler {:optimizations :whitespace
+                           :pretty-print true
+                           :preamble ["react/react.js"]
+                           :output-to "target/phi-ui-test.js"}}]})
