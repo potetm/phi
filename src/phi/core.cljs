@@ -134,10 +134,12 @@
   (will-unmount [this component]))
 
 (defprotocol IWillUpdate
-  (will-update [this component next-props next-db]))
+  (will-update [this component next-props]
+               [this component next-props next-db]))
 
 (defprotocol IDidUpdate
-  (did-update [this component prev-props prev-db]))
+  (did-update [this component prev-props]
+              [this component prev-props prev-db]))
 
 ;; My additions
 
@@ -243,16 +245,23 @@
    (fn [next-props _next-state]
      (this-as
        this
-       (let [d (-get-dispatcher this)]
+       (let [d (-get-dispatcher this)
+             db (aget next-props "__phi_db")
+             props (aget next-props "__phi_props")]
          (when (satisfies? IWillUpdate d)
-           (will-update d this (aget next-props "__phi_props") (aget next-props "__phi_db"))))))
+           (if db
+             (will-update d this props db)
+             (will-update d this props))))))
    :componentDidUpdate
-   (fn [prev-props _prev-state]
+   (fn [_prev-props _prev-state]
      (this-as
        this
-       (let [d (-get-dispatcher this)]
+       (let [d (-get-dispatcher this)
+             db (-get-db this)]
          (when (satisfies? IDidUpdate d)
-           (did-update d this (aget prev-props "__phi_props") (aget prev-props "__phi_db"))))))
+           (if db
+             (did-update d this (-get-props this) db)
+             (did-update d this (-get-props this)))))))
    :render
    (fn []
      (this-as
@@ -347,11 +356,18 @@
     (if (satisfies? IPhiProps d)
       (fn [props]
         (c
-          #js {:__phi_props props}))
+          (if-let [k (:key props)]
+            #js {:key k
+                 :__phi_props props}
+            #js {:__phi_props props})))
       (fn [db & [props]]
         (c
-          #js {:__phi_db db
-               :__phi_props props})))))
+          (if-let [k (:key props)]
+            #js {:key k
+                 :__phi_db db
+                 :__phi_props props}
+            #js {:__phi_db db
+                 :__phi_props props}))))))
 
 (defn init-conn! [new-conn]
   (defonce conn (Conn. new-conn)))
