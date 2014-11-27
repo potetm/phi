@@ -8,10 +8,18 @@
 
 (declare conn)
 
+;; Debug
+
+(def ^{:private true} *debug-chan* nil)
+(def ^{:private true} *debug-conn-key* nil)
+
 ;; Events
 
 (defonce ^:private subscribers-map (atom {}))
+(defonce ^:private in (chan 1024))
+(defonce ^:private publisher-mult (a/mult in))
 (defonce ^:private publisher (chan 1024))
+(defonce ^:private _tapping_once (a/tap publisher-mult publisher))
 (defonce ^:private publication (a/pub publisher :type))
 
 (defrecord Event [id type message])
@@ -74,7 +82,25 @@
 
 (defn publish! [^Event e]
   {:pre [(instance? Event e)]}
-  (a/put! publisher e))
+  (a/put! in e))
+
+(defn start-debug-events! []
+  ;; maps look much better when you use console print
+  ;; not married to this, but I like it for now
+  (enable-console-print!)
+  (when *debug-chan*
+    (a/untap publisher-mult *debug-chan*))
+  (set! *debug-chan* (chan 10))
+  (a/tap publisher-mult *debug-chan*)
+  (go-loop []
+    (when-some [v (<! *debug-chan*)]
+      (println v)
+      (recur))))
+
+(defn stop-debug-events! []
+  (when *debug-chan*
+    (a/untap publisher-mult *debug-chan*))
+  (set! *debug-chan* nil))
 
 ;; Helpers
 
@@ -361,3 +387,20 @@
 (defn unmount-app [mount-point]
   (when-let [f (get @cleanup-fns mount-point)]
     (f)))
+
+(defn start-debug-conn! []
+  ;; maps look much better when you use console print
+  ;; not married to this, but I like it for now
+  (enable-console-print!)
+  (when *debug-conn-key*
+    (-unregister! conn *debug-conn-key*))
+  (set! *debug-conn-key* (gen-id))
+  (-register!
+    conn *debug-conn-key*
+    (fn [{:keys [db-after]}]
+      (println db-after))))
+
+(defn stop-debug-conn! []
+  (when *debug-conn-key*
+    (-unregister! conn *debug-conn-key*))
+  (set! *debug-conn-key* nil))

@@ -6,13 +6,14 @@
 (enable-console-print!)
 
 (phi/init-conn! (atom {}))
+(phi/start-debug-events!)
+(phi/start-debug-conn!)
 
 (defn my-fn-1 [e]
-  "my-fn-1")
+  (swap! phi/conn assoc :id (phi/gen-id)))
 
 (defn my-fn-2 [e]
-  (throw (js/Error. "test"))
-  "my-fn-2")
+  (println "my-fn-2"))
 
 (def app
   (phi/component
@@ -41,5 +42,7 @@
     (<! (a/timeout 1000))
     (phi/publish! (phi/event ::event {}))
     (<! (a/timeout 1000))
-    (phi/unmount-app (.-body js/document))
+    (phi/stop-debug-events!)
+    (phi/stop-debug-conn!)
+    (phi/publish! (phi/event ::event {}))
     #_(println @phi/subscribers-map))
