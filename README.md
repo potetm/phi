@@ -20,10 +20,10 @@ The underlying philosophy of Phi is that:
 Therefore, the "flow" of an app is something like this:
 
 ```
-|--->Db---->Render---->Message-->|
+^--->Db---->Render---->Message-->v
 |                                |
 |                                |
-|<--Update Db<--------Dispatch<--|
+^<--Update Db<--------Dispatch<--v
 ```
 
 Decoupling state updates from other concerns means that the source of an update event is
@@ -125,6 +125,6 @@ Phi:
 * Built-in integration with [DataScript](LKJLJ)
 
 Om:
-* Faster, due to its state management
+* Generally faster
 * State hiding, if that's what you're in to
 * No built-in templating system, meaning you can use what you want

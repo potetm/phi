@@ -10,14 +10,14 @@
 
 ;; Debug
 
-(def ^{:private true} *debug-chan* nil)
-(def ^{:private true} *debug-conn-key* nil)
+(def ^{:private true :dynamic true} *debug-chan* nil)
+(def ^{:private true :dynamic true} *debug-conn-key* nil)
 
 ;; Events
 
 (defonce ^:private subscribers-map (atom {}))
 (defonce ^:private in (chan 1024))
-(defonce ^:private publisher-mult (a/mult in))
+(defonce publisher-mult (a/mult in))
 (defonce ^:private publisher (chan 1024))
 (defonce ^:private _tapping_once (a/tap publisher-mult publisher))
 (defonce ^:private publication (a/pub publisher :type))
@@ -122,7 +122,11 @@
   (display-name [this component]))
 
 (defprotocol IShouldUpdate
-  (should-update? [this component next-props next-db]))
+  (should-update? [this component this-db next-db]
+                  [this component this-props this-db next-props next-db]))
+
+(defprotocol IShouldUpdateForProps
+  (should-update-for-props? [this component this-props next-props]))
 
 (defprotocol IWillMount
   (will-mount [this component]))
@@ -134,12 +138,18 @@
   (will-unmount [this component]))
 
 (defprotocol IWillUpdate
-  (will-update [this component next-props]
-               [this component next-props next-db]))
+  (will-update [this component this-db next-db]
+               [this component this-props this-db next-props next-db]))
+
+(defprotocol IWillUpdateProps
+  (will-update-props [this component this-props next-props]))
 
 (defprotocol IDidUpdate
-  (did-update [this component prev-props]
-              [this component prev-props prev-db]))
+  (did-update [this component this-db prev-db]
+              [this component this-props this-db prev-props prev-db]))
+
+(defprotocol IDidUpdateProps
+  (did-update-props [this component this-props prev-props]))
 
 ;; My additions
 
@@ -180,6 +190,19 @@
   (-register! [this key callback])
   (-unregister! [this key]))
 
+(defn- with-prop-check [f dispatcher component prev-or-next-props-raw]
+  (let [this-props (-get-props component)
+        this-db (-get-db component)
+        prev-or-next-props (aget prev-or-next-props-raw "__phi_props")
+        prev-or-next-db (aget prev-or-next-props-raw "__phi_db")]
+    (if (and (empty? this-props) (empty? prev-or-next-props))
+      (f dispatcher component this-db prev-or-next-db)
+      (f dispatcher component this-props this-db prev-or-next-props prev-or-next-db))))
+
+(def ^:private should-update?* (partial with-prop-check should-update?))
+(def ^:private will-update?* (partial with-prop-check will-update))
+(def ^:private did-update?* (partial with-prop-check did-update))
+
 (defprotocol IUpdateImmediately
   "Marker protocol for indicating you want this component
    to be updated immediately after each db update.
@@ -204,7 +227,8 @@
        this
        (let [d (-get-dispatcher this)]
          (cond
-           (satisfies? IShouldUpdate d) (should-update? d this next-props (aget next-props "__phi_db"))
+           (satisfies? IShouldUpdate d) (should-update?* d this next-props)
+           (satisfies? IShouldUpdateForProps d) (should-update-for-props? d this (-get-props this) (aget next-props "__phi_props"))
            (satisfies? IPhiProps d) (not= (-get-props this) (aget next-props "__phi_props"))
            :else true))))
    :componentWillMount
@@ -223,9 +247,9 @@
            (swap! update-immediately conj this))
          (when (satisfies? ISubscribe d)
            (let [props (-get-props this)
-                 sub-keys (if (seq props)
-                            (init-subscribers d props)
-                            (init-subscribers d))]
+                 sub-keys (if (empty? props)
+                            (init-subscribers d)
+                            (init-subscribers d props))]
              (-set-subscriber-keys this sub-keys)))
          (when (satisfies? IDidMount d)
            (did-mount d this)))))
@@ -245,23 +269,20 @@
    (fn [next-props _next-state]
      (this-as
        this
-       (let [d (-get-dispatcher this)
-             db (aget next-props "__phi_db")
-             props (aget next-props "__phi_props")]
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IWillUpdate d)
-           (if db
-             (will-update d this props db)
-             (will-update d this props))))))
+           (will-update?* d this next-props))
+         (when (satisfies? IWillUpdateProps d)
+           (will-update-props d this (-get-props this) (aget next-props "__phi_props"))))))
    :componentDidUpdate
-   (fn [_prev-props _prev-state]
+   (fn [prev-props _prev-state]
      (this-as
        this
-       (let [d (-get-dispatcher this)
-             db (-get-db this)]
+       (let [d (-get-dispatcher this)]
          (when (satisfies? IDidUpdate d)
-           (if db
-             (did-update d this (-get-props this) db)
-             (did-update d this (-get-props this)))))))
+           (did-update?* d this prev-props))
+         (when (satisfies? IDidUpdateProps d)
+           (did-update-props d this (-get-props this) (aget prev-props "__phi_props"))))))
    :render
    (fn []
      (this-as
