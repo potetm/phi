@@ -20,10 +20,10 @@ The underlying philosophy of Phi is that:
 Therefore, the "flow" of an app is something like this:
 
 ```
-^--->Db---->Render---->Message-->v
-|                                |
-|                                |
-^<--Update Db<--------Dispatch<--v
+^--->Realize Db---->Render---->Message-->v
+|                                        |
+|                                        |
+^<------Update Db<---------Dispatch<-----v
 ```
 
 Decoupling state updates from other concerns means that the source of an update event is
@@ -40,24 +40,20 @@ desired event type.
 Here's a small example application in Phi:
 
 ```clojure
-(ns simple-app
-  (:require-macros [cljs.core.async.macros :refer [go-loop]])
-  (:require [cljs.core.async :as a :refer [<! chan]]
-            [phi.core :as phi :refer [conn component publish! event add-subscriber]]))
+(phi/init-conn! (atom {:message ""}))
+(phi/start-debug-conn!)
+(phi/start-debug-events!)
 
-(phi/init-associative-conn! (atom {:message ""}))
-
-(add-subscriber update-message (a/sliding-buffer 20) [:update-message]
-  (go-loop []
-    (when-some [{{:keys [new-message]} :message} (<! update-message)]
-      (swap! conn assoc :message new-message)
-      (recur))))
+(phi/routing-table
+  (a/sliding-buffer 10)
+  [[::update-message] (fn update-message [{{:keys [new-message]} :message}]
+                        (swap! conn assoc :message new-message))])
 
 (def display-message
   (component
     (reify
       phi/IPhi
-      (render [_ db {:keys [static-message]}]
+      (render [_ {:keys [static-message]} db]
         (let [text (:message db)]
           [:div
            [:div (str "static message: " static-message)]
@@ -75,8 +71,7 @@ Here's a small example application in Phi:
              :on-change
              (fn [e]
                (.preventDefault e)
-               (publish!
-                 (event :update-message {:new-message (.. e -target -value)})))}]])))))
+               (publish! ::update-message {:new-message (.. e -target -value)}))}]])))))
 
 (def simple-app
   (component
@@ -89,6 +84,28 @@ Here's a small example application in Phi:
 
 (phi/mount-app simple-app (.-body js/document))
 ```
+
+## Phi API
+### Basic:
+* `conn`
+* `db`
+* `component`
+* `event`
+* `routing-table`
+* `add-subscriber`
+* debug conn
+* debug events
+* lifecycle methods
+* `mount-app`
+* `unmount-app`
+* helper fns:
+  * `get-ref`
+  * `get-dom-node`
+  * `get-child-node`
+  * `mounted?`
+
+### Advanced:
+* `publisher-mult`
 
 ## Phi vs. [Om](https://github.com/swannodette/om/)
 Phi is based on Om, so there are a lot of similarities. They both
@@ -103,8 +120,8 @@ Which begs the question.
 
 ### Why no cursors?
 As I understand it, cursors provide two things: modularity and speed. Regarding the former,
-I disagree that modularity is a worthwhile goal. I see no value whatsoever in forbidding others
-from viewing "my piece" of the global state. It is, after all, global. And as long as everyone
+I disagree that modularity is a worthwhile goal. I see no value in forbidding others from
+viewing "my piece" of the global state. It is, after all, global. And as long as everyone
 makes valid transactions, there is little value in forbidding others from writing to "my piece"
 of global state.
 
@@ -113,7 +130,7 @@ to using cursors. They limit your view of the world, perhaps prematurely. Making
 you don't have the full state available is more difficult.
 
 Phi does support passing parts of state to subcomponents via `IPhiProps`, and those props will
-be used in `shouldComponentUpdate` but it should should be seen as an optimization tradeoff.
+be used in `shouldComponentUpdate`, but it should be seen as an optimization tradeoff.
 
 ### Short list of differences
 Phi:
@@ -122,7 +139,7 @@ Phi:
 * State hiding, if that's what you're in to
 * Built-in hiccup style templates
 * Built-in event system
-* Built-in integration with [DataScript](LKJLJ)
+* Built-in integration with [DataScript](https://github.com/tonsky/datascript)
 
 Om:
 * Generally faster
