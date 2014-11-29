@@ -1,48 +1,59 @@
 (ns ui-test
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
   (:require [phi.core :as phi :refer-macros [add-subscriber]]
+            [dropdown :as d]
             [cljs.core.async :as a :refer [<!]]))
 
 (enable-console-print!)
 
-(phi/init-conn! (atom {}))
+(phi/init-conn!
+  (atom
+    (merge {}
+           {:dropdown-a d/initial-state
+            :dropdown-b d/initial-state})))
+
 (phi/start-debug-events!)
 (phi/start-debug-conn!)
 
-(defn my-fn-1 [e]
-  (swap! phi/conn assoc :id (phi/gen-id)))
+(defn search-for-items-a [{{:keys [value]} :message}]
+  (go (<! (a/timeout 500))
+      (swap! phi/conn assoc-in [:dropdown-a :dropdown-items]
+             [{:id 1
+               :value (str value " Test 1")}
+              {:id 2
+               :value (str value " Test 2")}
+              {:id 3
+               :value (str value " Test 3")}
+              {:id 4
+               :value (str value " Test 4")}])))
 
-(defn my-fn-2 [e]
-  (println "my-fn-2"))
+(defn search-for-items-b [{{:keys [value]} :message}]
+  (go (<! (a/timeout 100))
+      (swap! phi/conn assoc-in [:dropdown-b :dropdown-items]
+             [{:id 5
+               :value (str value " Test 5")}
+              {:id 6
+               :value (str value " Test 6")}
+              {:id 7
+               :value (str value " Test 7")}
+              {:id 8
+               :value (str value " Test 8")}])))
+
+(phi/routing-table
+  (a/sliding-buffer 10)
+  [[:dropdown-a/input-changed] search-for-items-a
+   [:dropdown-b/input-changed] search-for-items-b])
+
+(def dropdown-a (d/component "dropdown-a" [:dropdown-a]))
+(def dropdown-b (d/component "dropdown-b" [:dropdown-b]))
 
 (def app
   (phi/component
     (reify
       phi/IPhi
       (render [_ db]
-        [:div "HELLO"])
-      phi/ISubscribe
-      (init-subscribers [_]
-        (phi/routing-table
-          [[::event] (a/sliding-buffer 10) my-fn-1
-           [::event] (a/sliding-buffer 10) my-fn-2])))))
+        [:div
+         (dropdown-a db)
+         (dropdown-b db)]))))
 
-(def wrap
-  (phi/component
-    (reify
-      phi/IPhi
-      (render [_ db]
-        (app db)))))
-
-(phi/mount-app wrap (.-body js/document))
-
-(go (<! (a/timeout 1000))
-    ;(println @phi/subscribers-map)
-    (phi/publish! (phi/event ::event {}))
-    (<! (a/timeout 1000))
-    (phi/publish! (phi/event ::event {}))
-    (<! (a/timeout 1000))
-    (phi/stop-debug-events!)
-    (phi/stop-debug-conn!)
-    (phi/publish! (phi/event ::event {}))
-    #_(println @phi/subscribers-map))
+(phi/mount-app app (.-body js/document))
