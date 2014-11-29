@@ -37,9 +37,12 @@ things can be done without affecting current functionality by adding subscribers
 desired event type.
 
 ## Hi Phi
-Here's a small example application in Phi:
+Here's a small hello world application in Phi:
 
 ```clojure
+(ns hello-world
+  (:require [phi.core :as phi]))
+
 (phi/init-conn! (atom {:message ""}))
 (phi/start-debug-conn!)
 (phi/start-debug-events!)
@@ -47,10 +50,10 @@ Here's a small example application in Phi:
 (phi/routing-table
   (a/sliding-buffer 10)
   [[::update-message] (fn update-message [{{:keys [new-message]} :message}]
-                        (swap! conn assoc :message new-message))])
+                        (swap! phi/conn assoc :message new-message))])
 
 (def display-message
-  (component
+  (phi/component
     (reify
       phi/IPhi
       (render [_ {:keys [static-message]} db]
@@ -60,7 +63,7 @@ Here's a small example application in Phi:
            [:div (str "dynamic message: " text)]])))))
 
 (def message-input
-  (component
+  (phi/component
     (reify
       phi/IPhi
       (render [_ db]
@@ -74,7 +77,7 @@ Here's a small example application in Phi:
                (publish! ::update-message {:new-message (.. e -target -value)}))}]])))))
 
 (def simple-app
-  (component
+  (phi/component
     (reify
       phi/IPhi
       (render [_ db]
@@ -85,9 +88,19 @@ Here's a small example application in Phi:
 (phi/mount-app simple-app (.-body js/document))
 ```
 
-## Phi API
+## Using Phi
+Before getting started there are a few concepts to go over:
+* `conn`: A `cljs.core/atom` containing your db
+* `db`: An dereferenced immutable structure containing all of your application state
+* `event`: A record containing an id, type, and message
+* `component`: Corresponds to `React.createClass`
+
+When creating an app, the first thing you need to do is call `init-conn!`. After that,
+you can refer to your `conn` at any time at `phi.core/conn`.
+
 ### Basic:
 * `conn`
+* `init-conn!`
 * `db`
 * `component`
 * `event`
@@ -95,7 +108,7 @@ Here's a small example application in Phi:
 * `add-subscriber`
 * debug conn
 * debug events
-* lifecycle methods
+* lifecycle protocols
 * `mount-app`
 * `unmount-app`
 * helper fns:
@@ -106,6 +119,7 @@ Here's a small example application in Phi:
 
 ### Advanced:
 * `publisher-mult`
+* Making reusable libraries
 
 ## Phi vs. [Om](https://github.com/swannodette/om/)
 Phi is based on Om, so there are a lot of similarities. They both
@@ -138,7 +152,7 @@ Phi:
 * No intermediary between you and your state (i.e. no cursors)
 * State hiding, if that's what you're in to
 * Built-in hiccup style templates
-* Built-in event system
+* Built-in event management system
 * Built-in integration with [DataScript](https://github.com/tonsky/datascript)
 
 Om:

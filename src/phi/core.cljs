@@ -29,7 +29,9 @@
 
 ;; Public API
 
-(defn event [type message]
+(defn event
+  "Constructor for Events"
+  [type message]
   (Event. (gen-id) type message))
 
 (defn unsubscribe! [chan-key]
@@ -63,6 +65,21 @@
         (recur)))))
 
 (defn routing-table
+  "Creates subscriptions to the global publisher. The two
+   arity version allows you to set a buf-or-n for every
+   subscription. With the one arity version, you must explicitly
+   set it on every supscription.
+
+   Two arity:
+   buf-or-n - same as buf-or-n in cljs.core.async
+   desc - a vector of the following form:
+   [[:event-type-a] callback-a
+    [:event-type-b] callback-b]
+
+   One arity:
+   desc - a vector of the following form:
+   [[:event-type-a] buf-or-n callback-a
+    [:event-type-b] buf-or-n callback b]"
   ([buf-or-n desc]
     (routing-table
       (mapcat
@@ -81,13 +98,16 @@
           chan-key)))))
 
 (defn publish!
+  "Publish an event with the global publisher."
   ([event-type message]
     (publish! (event event-type message)))
   ([^Event e]
     {:pre [(instance? Event e)]}
     (a/put! in e)))
 
-(defn start-debug-events! []
+(defn start-debug-events!
+  "Print out every event to the console."
+  []
   ;; maps look much better when you use console print
   ;; not married to this, but I like it for now
   (enable-console-print!)
@@ -100,23 +120,33 @@
       (println v)
       (recur))))
 
-(defn stop-debug-events! []
+(defn stop-debug-events!
+  "Stop printing events to the console."
+  []
   (when *debug-chan*
     (a/untap publisher-mult *debug-chan*))
   (set! *debug-chan* nil))
 
 ;; Helpers
 
-(defn get-ref [component ref]
+(defn get-ref
+  "Get a ref to a subcomponent."
+  [component ref]
   (aget (.-refs component) ref))
 
-(defn get-dom-node [component]
+(defn get-dom-node
+  "Convenience wrapper for .getDOMNode"
+  [component]
   (.getDOMNode component))
 
-(defn get-child-node [component ref]
+(defn get-child-node
+  "Equivalent to component.refs.ref.getDOMNode() in raw React.js"
+  [component ref]
   (get-dom-node (get-ref component ref)))
 
-(defn mounted? [component]
+(defn mounted?
+  "Convenience wrapper for .isMounted"
+  [component]
   (.isMounted component))
 
 ;; React Lifecycle protocols (obviously borrowed from om)
@@ -168,6 +198,10 @@
   (render-props [this props]))
 
 (defprotocol ISubscribe
+  "Associate subscribers with a component. This is especially
+   useful for libraries. Subscribers will be initialized in
+   componentDidMount, and they will be unsubscribed in
+   componentWilUnmount."
   (init-subscribers [this]
                     [this props]))
 
@@ -370,7 +404,11 @@
 
 ;; Public API
 
-(defn component [d]
+(defn component
+  "Corresponds to React.createClass.
+
+  d - The dispatcher with reified lifecycle protocols"
+  [d]
   (let [c (js/React.createClass
             (specify-state-methods!
               (clj->js
@@ -393,10 +431,17 @@
             #js {:__phi_db db
                  :__phi_props props}))))))
 
-(defn init-conn! [new-conn]
+(defn init-conn!
+  "Intialize a conn."
+  [new-conn]
   (defonce conn (Conn. new-conn)))
 
-(defn mount-app [app mount-point]
+(defn mount-app
+  "Mount a component at a given mount point.
+
+   app - a component (do not invoke the component constructor)
+   mount-point - the dom element to mount at"
+  [app mount-point]
   (when (undefined? conn)
     (js/console.debug "Attempt to mount app before calling init-conn!"))
   (let [id (gen-id)
@@ -424,11 +469,15 @@
              (js/React.unmountComponentAtNode mount-point)))
     (render-from-root @conn)))
 
-(defn unmount-app [mount-point]
+(defn unmount-app
+  "Unmount the app at a given mount point."
+  [mount-point]
   (when-let [f (get @cleanup-fns mount-point)]
     (f)))
 
-(defn start-debug-conn! []
+(defn start-debug-conn!
+  "Print out the db every time a conn changes."
+  []
   ;; maps look much better when you use console print
   ;; not married to this, but I like it for now
   (enable-console-print!)
@@ -440,7 +489,9 @@
     (fn [{:keys [db-after]}]
       (println db-after))))
 
-(defn stop-debug-conn! []
+(defn stop-debug-conn!
+  "Stop printing db changes."
+  []
   (when *debug-conn-key*
     (-unregister! conn *debug-conn-key*))
   (set! *debug-conn-key* nil))
