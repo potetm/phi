@@ -157,7 +157,7 @@
   "The bare minimum protocol you must implement
    to be a phi component."
   (render [this db]
-          [this db props]))
+          [this props db]))
 
 (defprotocol IPhiProps
   "The other protocol you may implement
@@ -294,7 +294,7 @@
              (render-props d props)
              (if (empty? props)
                (render d (-get-db this))
-               (render d (-get-db this) props)))))))})
+               (render d props (-get-db this))))))))})
 
 (defn- specify-state-methods! [desc]
   (specify! desc
