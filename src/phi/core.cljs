@@ -80,9 +80,12 @@
           (subscribe-callback! chan-key buf-or-n events f)
           chan-key)))))
 
-(defn publish! [^Event e]
-  {:pre [(instance? Event e)]}
-  (a/put! in e))
+(defn publish!
+  ([event-type message]
+    (publish! (event event-type message)))
+  ([^Event e]
+    {:pre [(instance? Event e)]}
+    (a/put! in e)))
 
 (defn start-debug-events! []
   ;; maps look much better when you use console print
