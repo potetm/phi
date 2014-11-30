@@ -12,7 +12,7 @@ project, and without them Phi wouldn't exist:
 
 ## Current Version
 ```
-[phi "0.4.0"]
+[phi "0.5.0"]
 ```
 
 ## Why Phi
@@ -58,7 +58,7 @@ First create your `project.clj`:
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/clojurescript "0.0-2371"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [phi "0.4.0"]]
+                 [phi "0.5.0"]]
   :plugins [[lein-cljsbuild "1.0.3"]]
   :cljsbuild {:builds
               [{:id "dev"
@@ -144,6 +144,16 @@ lein do cljsbuild clean, cljsbuild auto dev
 ```
 
 Then just open `index.html` to see your application at work.
+
+## Other Phi Examples
+
+There are two [TodoMVC](http://todomvc.com/) examples:
+* Using an associative db
+  * [source](https://github.com/potetm/todomvc/tree/gh-pages/examples/phi-associative)
+  * [working example](https://potetm.github.io/todomvc/examples/phi-associative/index.html)
+* Using a datascript db
+  * [source](https://github.com/potetm/todomvc/tree/gh-pages/examples/phi-datascript)
+  * [working example](https://potetm.github.io/todomvc/examples/phi-datascript/index.html)
 
 ## Phi vs. [Om](https://github.com/swannodette/om/)
 Phi is based on Om, so there are a lot of similarities. They both
