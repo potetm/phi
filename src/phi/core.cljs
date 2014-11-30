@@ -15,7 +15,7 @@
 
 ;; Events
 
-(defonce ^:private subscribers-map (atom {}))
+(defonce subscribers-map (atom {}))
 (defonce ^:private in (chan 1024))
 (defonce publisher-mult (a/mult in))
 (defonce ^:private publisher (chan 1024))
