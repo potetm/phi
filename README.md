@@ -10,6 +10,11 @@ project, and without them Phi wouldn't exist:
 * [DataScript Chat](https://github.com/tonsky/datascript-chat)
 * [Om](https://github.com/swannodette/om/)
 
+## Current Version
+```
+[phi "0.4.0"]
+```
+
 ## Why Phi
 The underlying philosophy of Phi is that:
 
@@ -43,11 +48,43 @@ Before getting started there are a few concepts to go over:
 * `event`: A record containing an id, type, and message
 * `component`: Corresponds to `React.createClass`
 
-Here's a small hello world application in Phi:
+With that out of the way, here's a small hello world application in Phi.
+
+First create your `project.clj`:
+
+```
+(defproject
+  hello-world "0.1.0-SNAPSHOT"
+  :dependencies [[org.clojure/clojure "1.6.0"]
+                 [org.clojure/clojurescript "0.0-2371"]
+                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [phi "0.4.0"]]
+  :plugins [[lein-cljsbuild "1.0.3"]]
+  :cljsbuild {:builds
+              [{:id "dev"
+                :source-paths ["src"]
+                :compiler {:optimizations :whitespace
+                           :pretty-print true
+                           :preamble ["react/react.js"]
+                           :output-to "target/hello-world.js"}}]})
+```
+
+In `index.html`:
+
+```html
+<html>
+  <body>
+    <script src="target/hello-world.js" type="text/javascript"></script>
+  </body>
+</html>
+```
+
+Now the goods. In `src/hello_word.cljs`:
 
 ```clojure
 (ns hello-world
-  (:require [phi.core :as phi]))
+  (:require [cljs.core.async :as a]
+            [phi.core :as phi]))
 
 (phi/init-conn! (atom {:message ""}))
 (phi/start-debug-conn!)
@@ -80,7 +117,7 @@ Here's a small hello world application in Phi:
              :on-change
              (fn [e]
                (.preventDefault e)
-               (publish! ::update-message {:new-message (.. e -target -value)}))}]])))))
+               (phi/publish! ::update-message {:new-message (.. e -target -value)}))}]])))))
 
 (def simple-app
   (phi/component
@@ -93,6 +130,17 @@ Here's a small hello world application in Phi:
 
 (phi/mount-app simple-app (.-body js/document))
 ```
+
+You can build this example with:
+```
+lein do cljsbuild clean, cljsbuild once dev
+
+# or, to rebuild automatically
+
+lein do cljsbuild clean, cljsbuild auto dev
+```
+
+Then just open `index.html` to see your application at work.
 
 ## Phi vs. [Om](https://github.com/swannodette/om/)
 Phi is based on Om, so there are a lot of similarities. They both
