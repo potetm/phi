@@ -79,7 +79,7 @@ In `index.html`:
 </html>
 ```
 
-Now the goods. In `src/hello_word.cljs`:
+Now the goods. In `src/hello_world.cljs`:
 
 ```clojure
 (ns hello-world
