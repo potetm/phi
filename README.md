@@ -37,6 +37,12 @@ things can be done without affecting current functionality by adding subscribers
 desired event type.
 
 ## Hi Phi
+Before getting started there are a few concepts to go over:
+* `conn`: A `cljs.core/atom` containing your db
+* `db`: An dereferenced immutable structure containing all of your application state
+* `event`: A record containing an id, type, and message
+* `component`: Corresponds to `React.createClass`
+
 Here's a small hello world application in Phi:
 
 ```clojure
@@ -87,39 +93,6 @@ Here's a small hello world application in Phi:
 
 (phi/mount-app simple-app (.-body js/document))
 ```
-
-## Using Phi
-Before getting started there are a few concepts to go over:
-* `conn`: A `cljs.core/atom` containing your db
-* `db`: An dereferenced immutable structure containing all of your application state
-* `event`: A record containing an id, type, and message
-* `component`: Corresponds to `React.createClass`
-
-When creating an app, the first thing you need to do is call `init-conn!`. After that,
-you can refer to your `conn` at any time at `phi.core/conn`.
-
-### Basic:
-* `conn`
-* `init-conn!`
-* `db`
-* `component`
-* `event`
-* `routing-table`
-* `add-subscriber`
-* debug conn
-* debug events
-* lifecycle protocols
-* `mount-app`
-* `unmount-app`
-* helper fns:
-  * `get-ref`
-  * `get-dom-node`
-  * `get-child-node`
-  * `mounted?`
-
-### Advanced:
-* `publisher-mult`
-* Making reusable libraries
 
 ## Phi vs. [Om](https://github.com/swannodette/om/)
 Phi is based on Om, so there are a lot of similarities. They both

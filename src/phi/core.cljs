@@ -79,7 +79,9 @@
    One arity:
    desc - a vector of the following form:
    [[:event-type-a] buf-or-n callback-a
-    [:event-type-b] buf-or-n callback b]"
+    [:event-type-b] buf-or-n callback b]
+
+   Returns a list of chan-keys stored in the subscriber-map."
   ([buf-or-n desc]
     (routing-table
       (mapcat
@@ -199,9 +201,14 @@
 
 (defprotocol ISubscribe
   "Associate subscribers with a component. This is especially
-   useful for libraries. Subscribers will be initialized in
-   componentDidMount, and they will be unsubscribed in
-   componentWilUnmount."
+   useful for libraries.
+
+   The return value for this function must be a list of the
+   chan-keys created. The easiest way to do that is to either
+   use a routing-table or wrap calls to add-subscriber in a vector.
+
+   Subscribers will be initialized in componentDidMount, and
+   they will be unsubscribed in componentWilUnmount."
   (init-subscribers [this]
                     [this props]))
 
