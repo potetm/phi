@@ -132,11 +132,14 @@ Now the goods. In `src/hello_word.cljs`:
 ```
 
 You can build this example with:
+
 ```
 lein do cljsbuild clean, cljsbuild once dev
+```
 
-# or, to rebuild automatically
+or, to rebuild automatically
 
+```
 lein do cljsbuild clean, cljsbuild auto dev
 ```
 
