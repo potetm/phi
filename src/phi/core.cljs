@@ -158,7 +158,7 @@
 
 (defprotocol IShouldUpdate
   (should-update? [this component this-db next-db]
-                  [this component this-props this-db next-props next-db]))
+                  [this component this-db next-db this-props next-props]))
 
 (defprotocol IShouldUpdateForProps
   (should-update-for-props? [this component this-props next-props]))
@@ -174,14 +174,14 @@
 
 (defprotocol IWillUpdate
   (will-update [this component this-db next-db]
-               [this component this-props this-db next-props next-db]))
+               [this component this-db next-db this-props next-props]))
 
 (defprotocol IWillUpdateProps
   (will-update-props [this component this-props next-props]))
 
 (defprotocol IDidUpdate
   (did-update [this component this-db prev-db]
-              [this component this-props this-db prev-props prev-db]))
+              [this component this-db prev-db this-props prev-props]))
 
 (defprotocol IDidUpdateProps
   (did-update-props [this component this-props prev-props]))
@@ -192,7 +192,7 @@
   "The bare minimum protocol you must implement
    to be a phi component."
   (render [this db]
-          [this props db]))
+          [this db props]))
 
 (defprotocol IPhiProps
   "The other protocol you may implement
@@ -241,7 +241,7 @@
         prev-or-next-db (aget prev-or-next-props-raw "__phi_db")]
     (if (and (empty? this-props) (empty? prev-or-next-props))
       (f dispatcher component this-db prev-or-next-db)
-      (f dispatcher component this-props this-db prev-or-next-props prev-or-next-db))))
+      (f dispatcher component this-db prev-or-next-db this-props prev-or-next-props))))
 
 (def ^:private should-update?* (partial with-prop-check should-update?))
 (def ^:private will-update?* (partial with-prop-check will-update))
@@ -338,7 +338,7 @@
              (render-props d props)
              (if (empty? props)
                (render d (-get-db this))
-               (render d props (-get-db this))))))))})
+               (render d (-get-db this) props)))))))})
 
 (defn- specify-state-methods! [desc]
   (specify! desc
