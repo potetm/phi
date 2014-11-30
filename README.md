@@ -210,7 +210,7 @@ using `defonce`. This function must be called before mounting your app.
 
 #### Db Data Structures
 Phi has no opinion about what you should use for your db data structure. You can use
-seqs, lists, maps, vectors, or even a raw JavaScript object. You can use what you think is best.
+seqs, lists, maps, vectors, or even a raw JavaScript object. Use what you think is best.
 
 That being said, I suspect you'll have the most flexibility with either DataScript or an
 associative structure (maps and vectors). My personal favorite, and the project which partially
