@@ -1,5 +1,5 @@
 (defproject
-  phi "0.5.0"
+  phi "0.5.1"
   :description "A framework for fluxing the frontend"
   :url "https://github.com/potetm/phi"
   :license {:name "Eclipse Public License"
