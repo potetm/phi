@@ -635,9 +635,10 @@ Phi is based on Om, so there are a lot of similarities. They both
 use a global application state, and they both make heavy use of protocols.
 
 At the end of the day, the only fundamental difference between Om and Phi
-is that with Phi you pass the entire application state to components, and with Om you
-pass parts of the state to components with cursors. Everything else Phi does
-can be done in Om. Om just doesn't provide it out of the box.
+(that I am aware of) is that with Phi you pass the entire application state
+to components, and with Om you pass parts of the state to components with
+cursors. Everything else Phi does can be done in Om. Om just doesn't provide
+it out of the box.
 
 Which begs the question.
 
@@ -654,17 +655,3 @@ you don't have the full state available is more difficult.
 
 Phi does support passing parts of state to subcomponents via `IPhiProps`, and those props will
 be used in `shouldComponentUpdate`, but it should be seen as an optimization tradeoff.
-
-### Short list of differences
-Phi:
-* All components can query the entirety of the application state
-* No intermediary between you and your state (i.e. no cursors)
-* State hiding, if that's what you're in to
-* Built-in hiccup style templates
-* Built-in event management system
-* Built-in integration with [DataScript](https://github.com/tonsky/datascript)
-
-Om:
-* Generally faster
-* State hiding, if that's what you're in to
-* No built-in templating system, meaning you can use what you want
