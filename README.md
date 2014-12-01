@@ -10,66 +10,27 @@ project, and without them Phi wouldn't exist:
 * [DataScript Chat](https://github.com/tonsky/datascript-chat)
 * [Om](https://github.com/swannodette/om/)
 
-## Current Version
+# Current Version
 ```
 [phi "0.5.0"]
 ```
 
-## Table Of Contents
+# Table Of Contents
 - [Phi](#phi)
 - [Current Version](#current-version)
 - [Why Phi](#why-phi)
 - [Hi Phi - An Introduction](#hi-phi)
 - [API](#api)
   - [State](#state)
-    - [`conn`](#conn)
-    - [`db`](#db)
-    - [`phi.core/conn`](#phicoreconn)
-    - [`init-conn!`](#init-conn)
-    - [Db Data Structures](#db-data-structures)
   - [Events](#events)
-    - [Global Publication](#global-publication)
-      - [`publish!](#publish)
-      - [`publisher-mult`](#publisher-mult)
-    - [`event`](#event)
-    - [Subscribers](#subscribers)
-      - [`subscribers-map`](#subscribers-map)
-      - [`add-subscriber`](#add-subscriber)
-      - [`routing-table`](#routing-table)
   - [Rendering](#rendering)
-    - [`component`](#component)
-      - [Phi Protocols](#phi-protocols)
-        - [`IPhi`](#iphi)
-        - [`IPhiProps`](#iphiprops)
-        - [`ISubscribe`](#isubscribe)
-      - [Lifecycle Protocols](#lifecycle-protocols)
-        - [`IDisplayName`](#idisplayname)
-        - [`IShouldUpdate`](#ishouldupdate)
-        - [`IShouldUpdateForProps`](#ishouldupdateforprops)
-        - [`IWillMount`](#iwillmount)
-        - [`IDidMount`](#ididmount)
-        - [`IWillUnmount`](#iwillunmount)
-        - [`IWillUpdate`](#iwillupdate)
-        - [`IWillUpdateProps`](#iwillupdateprops)
-        - [`IDidUpdate`](#ididupdate)
-        - [`IDidUpdateProps`](#ididupdateprops)
-    - [`mount-app`](#mount-app)
-    - [`unmount-app`](#unmount-app)
-    - [`get-ref`](#get-ref)
-    - [`get-dom-node`](#get-dom-node)
-    - [`get-child-node`](#get-child-node)
-    - [`mounted?`](#mounted)
   - [Debugging](#debugging)
-    - [`start-debug-events!`](#start-debug-events)
-    - [`stop-debug-events!`](#stop-debug-events)
-    - [`start-debug-conn!`](#start-debug-conn)
-    - [`stop-debug-conn!`](#stop-debug-conn)
 - [Phi Examples](#phi-examples)
 - [Phi vs. Om](#phi-vs-om)
   - [Why No Cursors?](#why-no-cursors)
   - [Short List of Differences](#short-list-of-differences)
 
-## Why Phi
+# Why Phi
 The underlying philosophy of Phi is that:
 
 1. All state should be global and globally available
@@ -95,7 +56,7 @@ make a remote call, or you want to make an unrelated state update. Any and all o
 things can be done without affecting current functionality by adding subscribers to the
 desired event type.
 
-## Hi Phi
+# Hi Phi
 First create your `project.clj`:
 
 ```clojure
@@ -191,24 +152,30 @@ lein do cljsbuild clean, cljsbuild auto dev
 
 Then just open `index.html` to see your application at work.
 
-## API
-### State
+# API
+## State
 In its API, Phi makes a distinction between a `conn` and a `db`. (This nomenclature was taken
 from [DataScript](https://github.com/tonsky/datascript).)
 
-<a name="conn">`conn`</a> is an [atom](http://clojure.org/atoms) which contains a [`db`](#db).
+When you see `conn` it is referring to an [atom](http://clojure.org/atoms) which contains a `db`.
 
-<a name="db">`db`</a> is a [data structure](#db-data-structures) representing the current
+When you see `db` it is referring to a [data structure](#db-data-structures) representing the current
 state of your application.
 
-<a name="phicoreconn">`phi.core/conn`</a> is the global reference to your app's `conn`. The
-purpose of this is to put your `conn` in a predefined, global location, so you and all
-of the libraries you use can easily access the `conn`.
+##### `conn`
+The global reference to your app's `conn`. The purpose of this is to put your `conn` in a predefined,
+global location, so you and all of the libraries you use can easily access it.
 
-<a name="init-conn">`(init-conn! conn)`</a> is the function which defines [`phi.core/conn`](#phicoreconn)
-using `defonce`. This function must be called before mounting your app.
+##### `init-conn!`
+The function which defines [`phi.core/conn`](#conn) using `defonce`. This function must be
+called before mounting your app.
 
-#### Db Data Structures
+Usage:
+```clojure
+(init-conn! conn)
+```
+
+### Db Data Structures
 Phi has no opinion about what you should use for your db data structure. You can use
 seqs, lists, maps, vectors, or even a raw JavaScript object. Use what you think is best.
 
@@ -216,31 +183,48 @@ That being said, I suspect you'll have the most flexibility with either DataScri
 associative structure (maps and vectors). My personal favorite, and the project which partially
 inspired Phi, is DataScript. It is the most flexible, and has extremely powerful semantics.
 
-### Events
+## Events
 Every event in Phi goes over a single, global `core.async/chan`. Events are dispatched by type
 via core.async's built-in [`pub`](https://clojure.github.io/core.async/#clojure.core.async/pub).
 Subscribers are channels that are subscribed via [`sub`](https://clojure.github.io/core.async/#clojure.core.async/sub).
 
-<a name="event-type">`Event`</a> is a record consisting of an `id`, `type`, and `message`.
+##### `Event`
+A record consisting of an `id`, `type`, and `message`.
 
-<a name="event">(event type message)</a> convenience constructor for `Event`s. Generates a unique id.
+##### `event`
+Convenience constructor for `Event`s. Generates a unique id.
 
-<a name="publish">`(publish! event)`</a> publishes an event. There is also the convenience overload
-`(publish! type message)` which constructs an event and immediately publishes it.
+Usage:
+```clojure
+(event type message)
+```
 
-<a name="subscribers-map">`subscribers-map`</a> is an atom containing a map of the following form:
+##### `publish!`
+Publishes an event.
+
+Usage:
+```clojure
+(publish! event)
+(publish! type message)
+```
+
+##### `subscribers-map`
+An atom containing a map of the following form:
 
 ```clojure
 {:chan-key-a {:chan chan-a, :topics [:event-type-a]}
  :chan-key-b {:chan chan-b, :topics [:event-type-b]}}
 ```
 
-This is used internally for cleaning up subscribers. It can also potentially be used to see what chans
+This is used internally for cleaning up subscribers. It could also be used to see what chans
 are subscribed to particular topics.
 
-<a name="add-subscriber">`add-subscriber`</a> is a macro that creates a single subscriber. Returns a
-generated chan-key for retrieval from [`subscribers-map`](#subscribers-map). Example usage:
+##### `add-subscriber`
+A macro that creates a single subscriber.
 
+This is useful when you need to do a lot of channel coordination in a subscriber.
+
+Usage:
 ```clojure
 (add-subscriber my-subscriber (a/sliding-buffer 10) [:my-event-type]
   (go-loop []
@@ -249,34 +233,34 @@ generated chan-key for retrieval from [`subscribers-map`](#subscribers-map). Exa
       (recur))
 ```
 
-This is useful when you need to do a lot of channel coordination in a subscriber.
+Returns: a generated chan-key for retrieval from [`subscribers-map`](#subscribers-map).
 
-<a name="routing-table">`routing-table`</a> is a function designed to take some of the verbosity
-out of making subscribers. It has two arities. The two-arity form takes a `buf-or-n` to be used
-for every subscriber. The one-arity form allows you to define a `buf-or-n` for each subscriber
-individually.
+##### `routing-table`
+A function designed to take some of the verbosity out of making subscribers. It has two arities.
+The two-arity form takes a `buf-or-n` to be used for every subscriber. The one-arity form allows
+you to define a `buf-or-n` for each subscriber individually.
 
-Two arity example:
+Callbacks should take a single argument which will be an [`Event`](#event).
+
+Usage:
 ```clojure
 (routing-table
   (a/sliding-buffer 10)
   [[:event-type-a] callback-a
    [:event-type-b] callback-b])
-```
-One arity example:
-```clojure
+
 (routing-table
   [[:event-type-a] (a/sliding-buffer 10) callback-a
    [:event-type-b] (a/sliding-buffer 10) callback-b])
 ```
 
-Callbacks should take a single argument which will be the [`Event`](#event-type).
 
-It returns a list of chan-keys for retrieval from the [`subscribers-map`](#subscribers-map).
+Returns: a seq of chan-keys for retrieval from the [`subscribers-map`](#subscribers-map).
 
-<a name="publisher-mult">`publisher-mult`</a> is a [`mult`](https://clojure.github.io/core.async/#clojure.core.async/mult)
-which feeds the global publication. This means that you can receive every event by tapping
-this mult without affecting other subscribers. This is particularly useful for [debugging](#debugging).
+##### `publisher-mult`
+A [`mult`](https://clojure.github.io/core.async/#clojure.core.async/mult) which feeds the global
+publication. This means that you can receive every event by tapping this mult without affecting
+other subscribers. This is particularly useful for [debugging](#debugging).
 
 ### Rendering
 <a name="component">`component`</a> corresponds to `React.createClass`. Creates a class and returns
