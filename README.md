@@ -161,7 +161,7 @@ When you see `conn` it is referring to an [atom](http://clojure.org/atoms) which
 
 When you see `db` it is referring to a data structure representing the current state of your application.
 
-Phi has no opinion about what you should use for your db data structure. You can use
+Phi has no opinion about what you should use for your `db` data structure. You can use
 seqs, lists, maps, vectors, or even a raw JavaScript object. Use what you think is best.
 
 That being said, I suspect you'll have the most flexibility with either DataScript or an
@@ -224,7 +224,7 @@ A macro that creates a single subscriber.
 
 This is useful when you need to do a lot of channel coordination in a subscriber.
 
-Usage:
+Example Usage:
 ```clojure
 (add-subscriber my-subscriber (a/sliding-buffer 10) [:my-event-type]
   (go-loop []
@@ -266,14 +266,8 @@ publication. This means that you can receive every event by tapping this mult wi
 other subscribers. This is particularly useful for [debugging](#debugging).
 
 ## Rendering
-<a name="component">`component`</a> corresponds to `React.createClass`. Creates a class and returns
-a constructor. If your component implements [`IPhi`](#iphi), the constructor has the signature
-`(fn [db & [props]] …)`. If it implements [`IPhiProps`](#iphiprops), it has the signature
-`(fn [props] …)`. Note that the arguments are the same as the arguments passed to the `render` function
-for each protocol.
-
-The return value of `render` and `render-props` is passed through [ŜABLONO](https://github.com/r0man/sablono)'s
-`sablano.core/html` macro.
+### component
+Corresponds to `React.createClass`.
 
 Example usage:
 ```clojure
@@ -321,21 +315,28 @@ Example usage:
          (phi-props {:message "I have no db access"})]))))
 ```
 
-##### Phi Protocols
-###### `IPhi`
+Returns: Creates a class and returns a constructor. If your component implements [`IPhi`](#iphi),
+the constructor has the signature `(fn [db & [props]] …)`. If it implements [`IPhiProps`](#iphiprops),
+it has the signature `(fn [props] …)`. Note that the arguments are the same as the arguments passed
+to the `render` function for each protocol.
+
+### Phi Protocols
+#### IPhi
 ```clojure
-(defprotocol IPhi (render [this db]
-                          [this db props]))
+(defprotocol IPhi
+  (render [this db]
+          [this db props]))
 ```
 
 This is the standard protocol for Phi components. Components can take optional props,
 which is useful for passing arguments to subcomponents.
 
-Returns a hiccup-like data structure to be parsed by [ŜABLONO](https://github.com/r0man/sablono).
+Returns: a hiccup-like data structure to be parsed by [ŜABLONO](https://github.com/r0man/sablono).
 
-###### `IPhiProps`
+#### IPhiProps
 ```clojure
-(defprotocol IPhiProps (render-props [this props]))
+(defprotocol IPhiProps
+  (render-props [this props]))
 ```
 
 This protocol is useful for optimizing an application. Components will check whether
@@ -347,19 +348,20 @@ In this instance, the trade-off for speed is flexibility. Components that receiv
 whole db can be easily changed to display different data. This is less true for components
 that only receive specific props.
 
-Returns a hiccup-like data structure to be parsed by [ŜABLONO](https://github.com/r0man/sablono).
+Returns: a hiccup-like data structure to be parsed by [ŜABLONO](https://github.com/r0man/sablono).
 
-###### `ISubscribe`
+#### ISubscribe
 ```clojure
-(defprotocol ISubscribe (init-subscribers [this]
-                                          [this props]))
+(defprotocol ISubscribe
+  (init-subscribers [this]
+                    [this props]))
 ```
 
 Called once during [`componentDidMount`](https://facebook.github.io/react/docs/component-specs.html#mounting-componentdidmount).
-Useful for external libraries that need to define subscribers. I don't recommend using it for
+Useful for external libraries that need to define subscribers. Not recommended for
 all of your subscribers.
 
-Returns a list of [chan-keys](#subscribers-map). Those keys will be used for unsubscribing those chans
+Returns: a list of [chan-keys](#subscribers-map). Those keys will be used for unsubscribing those chans
 during the [`componentWillUnmount`](https://facebook.github.io/react/docs/component-specs.html#unmounting-componentwillunmount)
 phase.
 
