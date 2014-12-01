@@ -415,12 +415,12 @@ Returns: the string displayed in
                   [this component this-db next-db this-props next-props]))
 ```
 
-`component` - the React component
-`this-db` - the currently rendered `db`
-`next-db` - the `db` which is going to be rendered
-`this-props` - the currently rendered `props`
-`next-props` - the `props` which are going to be rendered
-
+`component` - the React component<br />
+`this-db` - the currently rendered `db`<br />
+`next-db` - the `db` which is going to be rendered<br />
+`this-props` - the currently rendered `props`<br />
+`next-props` - the `props` which are going to be rendered<br />
+<br />
 Use with caution.
 
 Returns: true if the component should re-render, false if it should not.
@@ -473,11 +473,11 @@ Corresponds to [`componentWillUnmount`](https://facebook.github.io/react/docs/co
                [this component this-db next-db this-props next-props]))
 ```
 
-`component` - the React component
-`this-db` - the currently rendered `db`
-`next-db` - the `db` which is going to be rendered
-`this-props` - the currently rendered `props`
-`next-props` - the `props` which are going to be rendered
+`component` - the React component<br />
+`this-db` - the currently rendered `db`<br />
+`next-db` - the `db` which is going to be rendered<br />
+`this-props` - the currently rendered `props`<br />
+`next-props` - the `props` which are going to be rendered<br />
 
 Corresponds to [`componentWillUpdate`](https://facebook.github.io/react/docs/component-specs.html#updating-componentwillupdate)
 
@@ -497,11 +497,11 @@ Same as [IWillUpdate](#IWillUpdate), but for components which implement
               [this component this-db prev-db this-props prev-props]))
 ```
 
-`component` - the React component
-`this-db` - the currently rendered `db`
-`next-db` - the `db` which is going to be rendered
-`this-props` - the currently rendered `props`
-`next-props` - the `props` which are going to be rendered
+`component` - the React component<br />
+`this-db` - the currently rendered `db`<br />
+`next-db` - the `db` which is going to be rendered<br />
+`this-props` - the currently rendered `props`<br />
+`next-props` - the `props` which are going to be rendered<br />
 
 Corresponds to [`componentDidUpdate`](https://facebook.github.io/react/docs/component-specs.html#updating-componentdidupdate)
 
