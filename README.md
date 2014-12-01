@@ -321,11 +321,79 @@ it has the signature `(fn [props] …)`. Note that the arguments are the same as
 to the `render` function for each protocol.
 
 ### mount-app
+Mount your app into the DOM.
+
+Usage:
+```clojure
+(mount-app root-component mount-point)
+```
+
+`root-component` - the topmost component in your app<br />
+`mount-point` - the DOM element to mount at
+
+Example Usage:
+```clojure
+(mount-app my-root-component (js/document.getElementById "my-div"))
+```
+
 ### unmount-app
+Unmount your app.
+
+Usage:
+```clojure
+(unmount-app mount-point)
+```
+
+`mount-point` - the DOM element is the current mount-point for the app
+
 ### get-ref
+Get a [`ref`](https://facebook.github.io/react/docs/more-about-refs.html#the-ref-attribute)
+from a given component.
+
+Usage:
+```clojure
+(get-ref component ref)
+```
+
+`component` - the React component which contains the ref<br />
+`ref` - the string which identifies the ref
+
+Returns: the requested ref
+
 ### get-dom-node
+Convenience wrapper for [`.getDOMNode`](https://facebook.github.io/react/docs/component-api.html#getdomnode)
+
+Usage:
+```clojure
+(get-dom-node component)
+```
+
+`component` - the React component which contains the ref
+
+Returns: The native browser DOM node.
+
 ### get-child-node
+Equivalent to `component.refs.ref.getDOMNode()` in raw React.
+
+Usage:
+```clojure
+(get-child-node component ref)
+```
+
+`component` - the React component which contains the ref<br />
+`ref` - the string which identifies the ref
+
+Returns: the requested ref
+
 ### mounted?
+Convenience wrapper for [`.isMounted`](https://facebook.github.io/react/docs/component-api.html#ismounted)
+
+Usage:
+```clojure
+(mounted? component)
+```
+
+Returns: true if the component is mounted into the DOM, false otherwise.
 
 ### Phi Protocols
 #### IPhi
@@ -499,9 +567,9 @@ Same as [IWillUpdate](#IWillUpdate), but for components which implement
 
 `component` - the React component<br />
 `this-db` - the currently rendered `db`<br />
-`next-db` - the `db` which is going to be rendered<br />
+`prev-db` - the `db` which was previously rendered<br />
 `this-props` - the currently rendered `props`<br />
-`next-props` - the `props` which are going to be rendered<br />
+`prev-props` - the `props` which were previously rendered<br />
 
 Corresponds to [`componentDidUpdate`](https://facebook.github.io/react/docs/component-specs.html#updating-componentdidupdate)
 
@@ -514,11 +582,23 @@ Corresponds to [`componentDidUpdate`](https://facebook.github.io/react/docs/comp
 Same as [IDidUpdate](#IDidUpdate), but for components which implement
 [IPhiProps](#IPhiProps).
 
-### Debugging
-#### `start-debug-events!`
-#### `stop-debug-events!`
-#### `start-debug-conn!`
-#### `stop-debug-conn!`
+## Debugging
+I found all of these useful while creating small apps with Phi, though I
+don't think they will work for all circumstances. These might change
+considerably to accommodate more use cases, but, in the meantime, you can
+consult the source and tweak these to suit your needs.
+
+### `start-debug-events!`
+Call this to print every event to the console.
+
+### `stop-debug-events!`
+Call this to stop printing every event to the console.
+
+### `start-debug-conn!`
+Call this to print every db to the console.
+
+### `stop-debug-conn!`
+Call this to stop printing every db to the console.
 
 ## Phi Examples
 
