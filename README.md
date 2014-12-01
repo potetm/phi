@@ -320,6 +320,13 @@ the constructor has the signature `(fn [db & [props]] …)`. If it implements [`
 it has the signature `(fn [props] …)`. Note that the arguments are the same as the arguments passed
 to the `render` function for each protocol.
 
+### mount-app
+### unmount-app
+### get-ref
+### get-dom-node
+### get-child-node
+### mounted?
+
 ### Phi Protocols
 #### IPhi
 ```clojure
@@ -389,24 +396,123 @@ phi/ISubscribe
      [:event-type-b] callback-b]))
 ```
 
-##### Lifecycle Protocols
-###### `IDisplayName`
-###### `IShouldUpdate`
-###### `IShouldUpdateForProps`
-###### `IWillMount`
-###### `IDidMount`
-###### `IWillUnmount`
-###### `IWillUpdate`
-###### `IWillUpdateProps`
-###### `IDidUpdate`
-###### `IDidUpdateProps`
-#### `mount-app`
-#### `unmount-app`
-#### `get-ref`
-#### `get-dom-node`
-#### `get-child-node`
-#### `mounted?`
+### Lifecycle Protocols
+#### IDisplayName
+```clojure
+(defprotocol IDisplayName
+  (display-name [this component]))
+```
 
+`component` - the React component.
+
+Returns: the string displayed in
+[React Developer Tools](https://chrome.google.com/webstore/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi?hl=en).
+
+#### IShouldUpdate
+```clojure
+(defprotocol IShouldUpdate
+  (should-update? [this component this-db next-db]
+                  [this component this-db next-db this-props next-props]))
+```
+
+`component` - the React component
+`this-db` - the currently rendered `db`
+`next-db` - the `db` which is going to be rendered
+`this-props` - the currently rendered `props`
+`next-props` - the `props` which are going to be rendered
+
+Use with caution.
+
+Returns: true if the component should re-render, false if it should not.
+
+#### IShouldUpdateForProps
+```clojure
+(defprotocol IShouldUpdateForProps
+  (should-update-for-props? [this component this-props next-props]))
+```
+
+Same as [IShouldUpdate](#IShouldUpdate), but for components which implement
+[IPhiProps](#IPhiProps).
+
+Returns: true if the component should re-render, false if it should not.
+
+#### IWillMount
+```clojure
+(defprotocol IWillMount
+  (will-mount [this component]))
+```
+
+`component` - the React component
+
+Corresponds to [`componentWillMount`](https://facebook.github.io/react/docs/component-specs.html#mounting-componentwillmount)
+
+#### IDidMount
+```clojure
+(defprotocol IDidMount
+  (did-mount [this component]))
+```
+
+`component` - the React component
+
+Corresponds to [`componentDidMount`](https://facebook.github.io/react/docs/component-specs.html#mounting-componentdidmount)
+
+#### IWillUnmount
+```clojure
+(defprotocol IWillUnmount
+  (will-unmount [this component]))
+```
+
+`component` - the React component
+
+Corresponds to [`componentWillUnmount`](https://facebook.github.io/react/docs/component-specs.html#unmounting-componentwillunmount)
+
+#### IWillUpdate
+```clojure
+(defprotocol IWillUpdate
+  (will-update [this component this-db next-db]
+               [this component this-db next-db this-props next-props]))
+```
+
+`component` - the React component
+`this-db` - the currently rendered `db`
+`next-db` - the `db` which is going to be rendered
+`this-props` - the currently rendered `props`
+`next-props` - the `props` which are going to be rendered
+
+Corresponds to [`componentWillUpdate`](https://facebook.github.io/react/docs/component-specs.html#updating-componentwillupdate)
+
+#### IWillUpdateProps
+```clojure
+(defprotocol IWillUpdateProps
+  (will-update-props [this component this-props next-props]))
+```
+
+Same as [IWillUpdate](#IWillUpdate), but for components which implement
+[IPhiProps](#IPhiProps).
+
+#### IDidUpdate
+```clojure
+(defprotocol IDidUpdate
+  (did-update [this component this-db prev-db]
+              [this component this-db prev-db this-props prev-props]))
+```
+
+`component` - the React component
+`this-db` - the currently rendered `db`
+`next-db` - the `db` which is going to be rendered
+`this-props` - the currently rendered `props`
+`next-props` - the `props` which are going to be rendered
+
+Corresponds to [`componentDidUpdate`](https://facebook.github.io/react/docs/component-specs.html#updating-componentdidupdate)
+
+#### IDidUpdateProps
+```clojure
+(defprotocol IDidUpdateProps
+  (did-update-props [this component this-props prev-props]))
+```
+
+Same as [IDidUpdate](#IDidUpdate), but for components which implement
+[IPhiProps](#IPhiProps).
 
 ### Debugging
 #### `start-debug-events!`
