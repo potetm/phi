@@ -12,7 +12,7 @@ project, and without them Phi wouldn't exist:
 
 # Current Version
 ```
-[phi "0.5.0"]
+[phi "0.5.1"]
 ```
 
 # Table Of Contents
@@ -65,7 +65,7 @@ First create your `project.clj`:
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/clojurescript "0.0-2371"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [phi "0.5.0"]]
+                 [phi "0.5.1"]]
   :plugins [[lein-cljsbuild "1.0.3"]]
   :cljsbuild {:builds
               [{:id "dev"
