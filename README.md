@@ -159,14 +159,20 @@ from [DataScript](https://github.com/tonsky/datascript).)
 
 When you see `conn` it is referring to an [atom](http://clojure.org/atoms) which contains a `db`.
 
-When you see `db` it is referring to a [data structure](#db-data-structures) representing the current
-state of your application.
+When you see `db` it is referring to a data structure representing the current state of your application.
 
-##### `conn`
+Phi has no opinion about what you should use for your db data structure. You can use
+seqs, lists, maps, vectors, or even a raw JavaScript object. Use what you think is best.
+
+That being said, I suspect you'll have the most flexibility with either DataScript or an
+associative structure (maps and vectors). My personal favorite, and the project which partially
+inspired Phi, is DataScript. It is the most flexible, and has extremely powerful semantics.
+
+### conn
 The global reference to your app's `conn`. The purpose of this is to put your `conn` in a predefined,
 global location, so you and all of the libraries you use can easily access it.
 
-##### `init-conn!`
+### init-conn!
 The function which defines [`phi.core/conn`](#conn) using `defonce`. This function must be
 called before mounting your app.
 
@@ -175,31 +181,25 @@ Usage:
 (init-conn! conn)
 ```
 
-### Db Data Structures
-Phi has no opinion about what you should use for your db data structure. You can use
-seqs, lists, maps, vectors, or even a raw JavaScript object. Use what you think is best.
-
-That being said, I suspect you'll have the most flexibility with either DataScript or an
-associative structure (maps and vectors). My personal favorite, and the project which partially
-inspired Phi, is DataScript. It is the most flexible, and has extremely powerful semantics.
-
 ## Events
 Every event in Phi goes over a single, global `core.async/chan`. Events are dispatched by type
 via core.async's built-in [`pub`](https://clojure.github.io/core.async/#clojure.core.async/pub).
 Subscribers are channels that are subscribed via [`sub`](https://clojure.github.io/core.async/#clojure.core.async/sub).
 
-##### `Event`
+### Event
 A record consisting of an `id`, `type`, and `message`.
 
-##### `event`
-Convenience constructor for `Event`s. Generates a unique id.
+### event
+Convenience constructor for `Event`s.
 
 Usage:
 ```clojure
 (event type message)
 ```
 
-##### `publish!`
+Returns: An `Event` with a generated id and the given `type` and `message`.
+
+### publish!
 Publishes an event.
 
 Usage:
@@ -208,7 +208,7 @@ Usage:
 (publish! type message)
 ```
 
-##### `subscribers-map`
+### subscribers-map
 An atom containing a map of the following form:
 
 ```clojure
@@ -219,7 +219,7 @@ An atom containing a map of the following form:
 This is used internally for cleaning up subscribers. It could also be used to see what chans
 are subscribed to particular topics.
 
-##### `add-subscriber`
+### add-subscriber
 A macro that creates a single subscriber.
 
 This is useful when you need to do a lot of channel coordination in a subscriber.
@@ -235,34 +235,37 @@ Usage:
 
 Returns: a generated chan-key for retrieval from [`subscribers-map`](#subscribers-map).
 
-##### `routing-table`
-A function designed to take some of the verbosity out of making subscribers. It has two arities.
-The two-arity form takes a `buf-or-n` to be used for every subscriber. The one-arity form allows
-you to define a `buf-or-n` for each subscriber individually.
-
+### routing-table
+A function designed to take some of the verbosity out of making subscribers.
+It allows you make a series of subscribers and which simply proxy to a callback.
 Callbacks should take a single argument which will be an [`Event`](#event).
 
 Usage:
 ```clojure
+(routing-table buf-or-n desc)
+(routing-table desc)
+```
+
+Example Usage:
+```clojure
 (routing-table
   (a/sliding-buffer 10)
   [[:event-type-a] callback-a
-   [:event-type-b] callback-b])
+   [:event-type-b :event-type-c] callback-b])
 
 (routing-table
   [[:event-type-a] (a/sliding-buffer 10) callback-a
-   [:event-type-b] (a/sliding-buffer 10) callback-b])
+   [:event-type-b :event-type-c] (a/sliding-buffer 10) callback-b])
 ```
-
 
 Returns: a seq of chan-keys for retrieval from the [`subscribers-map`](#subscribers-map).
 
-##### `publisher-mult`
+### publisher-mult
 A [`mult`](https://clojure.github.io/core.async/#clojure.core.async/mult) which feeds the global
 publication. This means that you can receive every event by tapping this mult without affecting
 other subscribers. This is particularly useful for [debugging](#debugging).
 
-### Rendering
+## Rendering
 <a name="component">`component`</a> corresponds to `React.createClass`. Creates a class and returns
 a constructor. If your component implements [`IPhi`](#iphi), the constructor has the signature
 `(fn [db & [props]] …)`. If it implements [`IPhiProps`](#iphiprops), it has the signature
