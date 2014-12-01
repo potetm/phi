@@ -588,17 +588,37 @@ don't think they will work for all circumstances. These might change
 considerably to accommodate more use cases, but, in the meantime, you can
 consult the source and tweak these to suit your needs.
 
-### `start-debug-events!`
+### start-debug-events!
 Call this to print every event to the console.
 
-### `stop-debug-events!`
+Usage:
+```clojure
+(start-debug-events!)
+```
+
+### stop-debug-events!
 Call this to stop printing every event to the console.
 
-### `start-debug-conn!`
+Usage:
+```clojure
+(stop-debug-events!)
+```
+
+### start-debug-conn!
 Call this to print every db to the console.
 
-### `stop-debug-conn!`
+Usage:
+```clojure
+(start-debug-conn!)
+
+```
+### stop-debug-conn!
 Call this to stop printing every db to the console.
+
+Usage:
+```clojure
+(stop-debug-conn!)
+```
 
 ## Phi Examples
 
