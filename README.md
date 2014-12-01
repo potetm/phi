@@ -159,10 +159,10 @@ from [DataScript](https://github.com/tonsky/datascript).)
 
 When you see `conn` it is referring to an [atom](http://clojure.org/atoms) which contains a `db`.
 
-When you see `db` it is referring to a data structure representing the current state of your application.
+When you see `db` it is referring to a data structure representing a single state of your application.
 
 Phi has no opinion about what you should use for your `db` data structure. You can use
-seqs, lists, maps, vectors, or even a raw JavaScript object. Use what you think is best.
+seqs, lists, maps, vectors, or even a raw JavaScript object. Choose what you think is best.
 
 That being said, I suspect you'll have the most flexibility with either DataScript or an
 associative structure (maps and vectors). My personal favorite, and the project which partially
